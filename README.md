@@ -89,6 +89,8 @@ The current target is an ordinary single-timeline MKV. Subtitles, playlists, vid
 
 ## Build and test
 
+For ongoing development or a new Codex session, start with [project context](docs/context.md) and follow [AGENTS.md](AGENTS.md). Updating the shared context after meaningful changes and before handoffs is mandatory.
+
 The Python host uses the standard library. The Android project pins Media3 1.9.0, Android Gradle Plugin 8.13.2 and Gradle 8.13. Install JDK 17 or 21, Android SDK Platform 36 and Build Tools 36.1.0, then run:
 
 ```powershell
