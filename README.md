@@ -27,6 +27,7 @@ This project is **brand-independent** and designed for Android TV and Google TV 
 
 - The TV must support the particular codec, resolution, HDR format and profile through Android's hardware decoding APIs.
 - HDR10, HDR10+ and Dolby Vision depend on the media, container metadata, TV hardware and firmware. Dolby Vision Profile 7/FEL reconstruction is not promised. Profile 5 must not be treated as having an HDR10-compatible base layer.
+- The Windows laptop or desktop PC needs an **HDMI output**, or a **USB-C (Type-C) port that supports display/audio output through a compatible USB-C-to-HDMI adapter** (for example, [DisplayPort Alt Mode](https://www.displayport.org/displayport-over-usb-c/)). A USB-C connector alone does not guarantee this capability; a charging/data-only port is insufficient. The adapter and driver must also support the required TrueHD passthrough; adapter-based operation has not yet been verified for this project.
 - The Windows PC must already be able to bitstream the source's TrueHD track to the chosen HDMI endpoint using mpv/WASAPI exclusive mode.
 - The soundbar or receiver needs a compatible HDMI input. The design does not rely on the TV forwarding TrueHD audio.
 - The network must have headroom above the remux's peak bitrate. A nominal 100 Mbps TV Ethernet port may be a bottleneck.
@@ -46,7 +47,7 @@ There is no platform-specific TV brand integration, video re-encode, HDR convers
 
 1. Install Python 3.10+ and a suitable Windows [mpv build](https://mpv.io/installation/). Confirm standalone TrueHD passthrough works with your HDMI device first.
 2. Sideload the beta APK from the project's Releases page onto the TV. Use the matching Windows host bundle from the same release.
-3. Connect the PC's HDMI output directly to the soundbar/receiver's HDMI input and select that input. Use the TV's internal DualTheater app for video.
+3. Connect the PC's HDMI output, or the HDMI output of a compatible adapter connected to a display-capable USB-C port, to the soundbar/receiver's HDMI input and select that input. Use the TV's internal DualTheater app for video.
 4. Run `Start.cmd` on Windows. If mpv is not on PATH, the launcher asks for its executable path. Select the exact `wasapi/...` HDMI device from the displayed list.
 5. Select the laptop's name in the TV app. Enter the six-digit code shown on Windows once. Remembered laptops reconnect automatically.
 6. Open **http://localhost:8764**, choose a local MKV and press **Load**, then **Play / resume**. Auto-selection chooses a TrueHD audio track; track IDs can also be selected explicitly.

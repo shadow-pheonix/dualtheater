@@ -17,6 +17,7 @@ The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDM
 - Downloads: development-signed TV APK, matching Windows host/source ZIP and SHA-256 checksums. Python and mpv are installed separately.
 - `main` can include documentation changes after the release. Existing release assets are immutable under the current workflow; a new application release requires a new beta version.
 - Public documentation and app positioning are brand-independent. Compatibility depends on the actual TV, firmware, format and HDMI endpoint.
+- The Windows PC requires HDMI output, or a display/audio-capable USB-C (Type-C) port with a compatible HDMI adapter. Charging/data-only USB-C ports are insufficient. The adapter/driver must support TrueHD passthrough; adapter-based playback remains unverified in this project.
 
 ## Architecture and invariants
 
@@ -113,3 +114,4 @@ No current hardware validation results should be invented to close these items. 
 
 - 2026-10-27: Clarified the README's purpose: use existing Windows hardware to reduce the need for a separate dedicated media player. Published using the public noreply identity.
 - 2026-10-27: Added this shared handoff, root agent instructions requiring frequent context updates, and a README link for future sessions. Documentation-only work; the content/privacy scan, all 14 relative links in the three edited documents and the Git whitespace check passed. No new player or hardware tests are claimed for this edit.
+- 2026-10-27: Clarified the HDMI or display-capable USB-C-to-HDMI hardware requirement in the README and setup steps. Kept TrueHD adapter compatibility conditional and explicitly untested. Documentation-only change; relative links, content/privacy and Git whitespace checks passed before publication; no new hardware tests were run.
