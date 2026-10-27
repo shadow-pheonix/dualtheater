@@ -2,13 +2,13 @@
 
 **Experimental beta — still in testing.** This is a working prototype for experimentation, not a finished or broadly validated home-theater player. Physical lip-sync, device compatibility and long-session reliability still need testing.
 
-DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
+DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
 ## Why this project exists
 
 DualTheater aims to make high-quality 4K remux playback with lossless audio possible using a Windows laptop or desktop PC you already own, together with your compatible TV and HDMI sound system. By putting that existing hardware to work, it can help avoid the cost of a separate dedicated media player, such as an NVIDIA Shield. It is an experimental approach, and compatibility and synchronization still need testing on each setup.
 
-A TV's internal player may handle HDR video well while being unable to pass through a local file's lossless TrueHD Atmos track. A Windows PC may bitstream that audio correctly while local Dolby Vision video output is difficult or unsupported for the source. DualTheater separates those jobs so an existing TV, PC and compatible HDMI audio device can each do the part they support.
+A TV's internal player may handle HDR video well while being unable to pass through a local file's lossless TrueHD Atmos track. A Windows laptop or desktop PC may bitstream that audio correctly while local Dolby Vision video output is difficult or unsupported for the source. DualTheater separates those jobs so an existing TV, Windows laptop or desktop PC, and compatible HDMI audio device can each do the part they support.
 
 The goal is **native TV HDR video + untouched TrueHD Atmos packets + stable A/V synchronization**, without transcoding or requiring another playback box. It does not add codecs or HDR profiles that the TV lacks, and it cannot make an incompatible HDMI receiver accept TrueHD.
 
@@ -28,7 +28,7 @@ This project is **brand-independent** and designed for Android TV and Google TV 
 - The TV must support the particular codec, resolution, HDR format and profile through Android's hardware decoding APIs.
 - HDR10, HDR10+ and Dolby Vision depend on the media, container metadata, TV hardware and firmware. Dolby Vision Profile 7/FEL reconstruction is not promised. Profile 5 must not be treated as having an HDR10-compatible base layer.
 - The Windows laptop or desktop PC needs an **HDMI output**, or a **USB-C (Type-C) port that supports display/audio output through a compatible USB-C-to-HDMI adapter** (for example, [DisplayPort Alt Mode](https://www.displayport.org/displayport-over-usb-c/)). A USB-C connector alone does not guarantee this capability; a charging/data-only port is insufficient. The adapter and driver must also support the required TrueHD passthrough; adapter-based operation has not yet been verified for this project.
-- The Windows PC must already be able to bitstream the source's TrueHD track to the chosen HDMI endpoint using mpv/WASAPI exclusive mode.
+- The Windows laptop or desktop PC must already be able to bitstream the source's TrueHD track to the chosen HDMI endpoint using mpv/WASAPI exclusive mode.
 - The soundbar or receiver needs a compatible HDMI input. The design does not rely on the TV forwarding TrueHD audio.
 - The network must have headroom above the remux's peak bitrate. A nominal 100 Mbps TV Ethernet port may be a bottleneck.
 
@@ -47,7 +47,7 @@ There is no platform-specific TV brand integration, video re-encode, HDR convers
 
 1. Install Python 3.10+ and a suitable Windows [mpv build](https://mpv.io/installation/). Confirm standalone TrueHD passthrough works with your HDMI device first.
 2. Sideload the beta APK from the project's Releases page onto the TV. Use the matching Windows host bundle from the same release.
-3. Connect the PC's HDMI output, or the HDMI output of a compatible adapter connected to a display-capable USB-C port, to the soundbar/receiver's HDMI input and select that input. Use the TV's internal DualTheater app for video.
+3. Connect the Windows laptop's or desktop PC's HDMI output, or the HDMI output of a compatible adapter connected to a display-capable USB-C port, to the soundbar/receiver's HDMI input and select that input. Use the TV's internal DualTheater app for video.
 4. Run `Start.cmd` on Windows. If mpv is not on PATH, the launcher asks for its executable path. Select the exact `wasapi/...` HDMI device from the displayed list.
 5. Select the laptop's name in the TV app. Enter the six-digit code shown on Windows once. Remembered laptops reconnect automatically.
 6. Open **http://localhost:8764**, choose a local MKV and press **Load**, then **Play / resume**. Auto-selection chooses a TrueHD audio track; track IDs can also be selected explicitly.
