@@ -1,0 +1,83 @@
+name: Test and publish experimental beta
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+      - name: Host and protocol tests
+        run: python -m unittest discover -s tests -v
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Android SDK packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0'
+      - name: Build, Android tests and lint
+        run: .\android\gradlew.bat --project-dir android assembleDebug testDebugUnitTest lintDebug --console=plain
+      - name: Package sanitized source and beta APK
+        id: package
+        shell: pwsh
+        run: |
+          $text = Get-Content android/app/build.gradle -Raw
+          $version = [regex]::Match($text, "versionName '([^']+)'").Groups[1].Value
+          if ($version -notmatch '-beta\.') { throw 'Only beta versions may use this release workflow.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item android/app/build/outputs/apk/debug/app-debug.apk "dist/DualTheater-TV-v$version-debug.apk"
+          git archive --format=zip --prefix=dualtheater/ --output="dist/DualTheater-v$version.zip" HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Source archive failed.' }
+          Get-ChildItem dist -File | Sort-Object Name | Get-FileHash -Algorithm SHA256 | ForEach-Object {
+            '{0}  {1}' -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf)
+          } | Set-Content -Encoding utf8 dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: experimental-beta
+          path: dist/
+          retention-days: 7
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: experimental-beta
+          path: dist
+      - name: Publish a prerelease without overwriting existing versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA_TAG: v${{ needs.validate.outputs.version }}
+        shell: pwsh
+        run: |
+          gh release view $env:BETA_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host 'This beta is already published; leaving it unchanged.'; exit 0 }
+          $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
+          gh release create $env:BETA_TAG @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --prerelease --latest=false --title "$env:BETA_TAG - Experimental beta (still testing)" --notes-file .github/beta-release-notes.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1,0 +1,41 @@
+# Local runtime data and credentials
+logs/
+calibration.json
+pairings.json
+pairings.tmp
+settings.local.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Python / Android / IDE output
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.idea/
+.vscode/
+*.iml
+*.apk
+*.aab
+*.zip
+SHA256SUMS.txt
+tools/
+
+# Keep local test reports out of source history
+test-results*.txt
+*-lint.txt
+*-unit-tests.xml
+live-timing.json
+Thumbs.db
+.DS_Store
