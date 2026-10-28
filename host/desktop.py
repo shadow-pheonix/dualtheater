@@ -59,6 +59,7 @@ class DesktopWindow:
         style.configure('Title.TLabel', font=('Segoe UI', 22, 'bold'))
         style.configure('Heading.TLabel', font=('Segoe UI', 13, 'bold'))
         style.configure('Code.TLabel', font=('Consolas', 25, 'bold'))
+        style.configure('Navigate.TButton', font=('Segoe UI', 9, 'bold'), padding=(16, 7))
         outer = ttk.Frame(root, padding=20)
         outer.pack(fill='both', expand=True)
         heading = ttk.Frame(outer)
@@ -118,12 +119,14 @@ class DesktopWindow:
         self.start_button.pack(side='left')
         self.stop_button = ttk.Button(row, text='Disconnect', command=self.stop)
         self.stop_button.pack(side='left', padx=8)
+        self.player_button = ttk.Button(row, text='Go to Player →', style='Navigate.TButton',
+                                       command=lambda: self.tabs.select(self.player))
+        self.player_button.pack(side='right')
         ttk.Separator(self.connect).pack(fill='x', pady=8)
         ttk.Label(self.connect, textvariable=self.connection_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=6)
         self.pair_label = ttk.Label(self.connect, textvariable=self.pairing_text, style='Code.TLabel', wraplength=790)
         self.pair_label.pack(anchor='w', pady=5)
         self.note(self.connect, 'On the TV, open DualTheater TV Beta and choose this computer. Enter the code once. Remembered TVs can reconnect automatically.')
-        ttk.Button(self.connect, text='Go to Player →', command=lambda: self.tabs.select(self.player)).pack(anchor='w')
 
     def _player_page(self):
         ttk.Label(self.player, textvariable=self.playback_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=(0, 12))

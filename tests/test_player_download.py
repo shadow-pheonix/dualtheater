@@ -137,9 +137,9 @@ class PlayerDownloadTests(unittest.TestCase):
             manual.touch()
             with patch('host.desktop_support.managed_player',return_value=''), patch('host.desktop_support.shutil.which',return_value=None):
                 self.assertEqual(find_mpv(str(managed),Path(directory)/'empty',profile),'')
-                self.assertEqual(find_mpv(str(manual),data_dir=profile),str(manual))
+                self.assertEqual(find_mpv(str(manual),data_dir=profile),str(manual.resolve()))
             with patch('host.desktop_support.managed_player',return_value=str(managed)):
-                self.assertEqual(find_mpv(data_dir=profile),str(managed))
+                self.assertEqual(find_mpv(data_dir=profile),str(managed.resolve()))
 
     def test_desktop_worker_reports_ready_and_remains_usable_after_failure(self):
         with tempfile.TemporaryDirectory() as directory:

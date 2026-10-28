@@ -83,6 +83,8 @@ No Android Studio, Java, Gradle, FFmpeg or Python installation is needed for nor
 
 The mpv path and exact audio endpoint are saved privately. On later launches, the app refreshes available devices and starts the connection if the saved setup is still available. If your HDMI output disappears, reconnect it and refresh; the app does not silently substitute another device.
 
+**Go to Player →** is aligned on the right beside the connection buttons. You can also open the **2 Player** tab; connecting the TV switches there automatically.
+
 ### 3. Choose a movie and play
 
 On **Player**, click **Choose movie…**, select the original local MKV and click **Load movie**. Wait for both players to prepare, then click **Play**. TrueHD audio is selected automatically. The original file stays on Windows and is streamed directly to the TV; there is no separate upload or conversion step.

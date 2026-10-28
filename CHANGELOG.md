@@ -4,6 +4,7 @@
 
 - Download mpv directly from its official Windows release inside the desktop app; checksum verification, nested ZIP extraction, DLL retention and automatic selection.
 - Private offline cache with file-integrity checks, staged installation, cancellation and manual Browse fallback.
+- Go to Player is aligned with the connection buttons, avoiding clipping below the pairing instructions.
 - Upstream-download and real-mpv null-output checks in release CI, plus external-player startup from the frozen EXE.
 
 mpv is not redistributed in the EXE. HDMI passthrough with this downloaded build and physical A/V sync still need hardware testing.
