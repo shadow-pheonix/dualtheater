@@ -1,5 +1,7 @@
 # Architecture
 
+The following describes implemented playback behavior. The separate `feature/robust-sync` branch's [research and implementation decision](sync-research.md) proposes a renderer-supplied remote audio clock and explicit receiver/output-latency handling; that architecture has not been implemented or measured yet.
+
 The Windows host serves the original seekable media file byte-for-byte over HTTP. The Android TV/Google TV companion extracts video and passes it to a supported hardware MediaCodec through Media3. It has no audio renderer. The original container includes unused audio bytes; this uses additional network bandwidth but avoids remuxing and metadata changes.
 
 The same local file is read by mpv on Windows for compressed TrueHD output through WASAPI exclusive mode. mpv IPC stays on a randomly named local Windows pipe. The network protocol exposes only a small set of playback operations, not arbitrary mpv commands.

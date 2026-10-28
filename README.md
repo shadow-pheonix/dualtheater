@@ -6,7 +6,7 @@
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
-**Unreleased development branch:** `feature/playback-reliability` builds Windows/TV version `0.5.0-beta.2` with diagnostics, sanitized report export, restart protection and the first **DualTheater Calibration Preview** phone client (`0.1.0-beta.1`). The phone uses flash/beep capture timestamps without requiring a separate physical reference fixture. These features are not in the downloadable `0.4.1-beta.1` builds below. The base build and published assets are preserved. See [phone calibration setup](docs/phone-calibration.md) and [diagnostics instructions](docs/diagnostics.md).
+**Unreleased development:** `feature/playback-reliability` builds Windows/TV version `0.5.0-beta.2` with diagnostics, sanitized report export, restart protection and the first **DualTheater Calibration Preview** phone client (`0.1.0-beta.1`). The phone uses flash/beep capture timestamps without requiring a separate physical reference fixture. A separate `feature/robust-sync` branch was created from `main` with those prerequisites carried over; its [sync architecture research and selected candidates](docs/sync-research.md) are complete, but the new timing engine and distinct comparison builds are not implemented yet. These features are not in the downloadable `0.4.1-beta.1` builds below. The base build and published assets are preserved. See [phone calibration setup](docs/phone-calibration.md) and [diagnostics instructions](docs/diagnostics.md).
 
 ## Download
 
