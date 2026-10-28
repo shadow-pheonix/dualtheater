@@ -141,6 +141,7 @@ No current hardware validation results should be invented to close these items. 
 ## Recent progress
 
 - 2026-10-28 (phone calibration v1): Implemented the user-requested phone client without requiring a separate physical reference fixture. Added capture-clock analysis, irregular original reference, paired phone protocol/run ownership, explicit Apply, atomic saves, cancellation/recovery checks, Android/host tests and build/setup documentation. Software/source-asset results and remaining device acceptance are recorded above. Local preview development only; no base build change, merge, push or publication.
+  Local handoff artifacts are generated under ignored `dist/calibration-v1`: signed debug phone/TV APKs, a source ZIP from the feature commit and `SHA256SUMS.txt`. Both APK signatures/package identities and archive integrity were verified; source-archive checks exclude runtime profiles, credentials, signing keys and build directories. The Windows host is provided as source requiring Python or a Windows EXE build; no new Windows EXE was built on this Linux worker.
 
 - 2026-10-28 (preview feature development): Created `feature/playback-reliability` from the preserved base commit. Added diagnostics/export, reconnect generation protection, regression coverage and isolated desktop/Android preview profiles as detailed above. Final software checks passed with the recorded skips/warnings. The user reported no TV access during a power outage; no hardware commands were run. No merge, push or release was performed.
 
