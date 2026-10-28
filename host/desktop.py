@@ -37,6 +37,12 @@ class DesktopWindow:
         self.offset_loaded = False
         self.error_text = tk.StringVar(value=self.settings.warning)
         self.mpv_path = tk.StringVar(value=find_mpv(self.settings.values.get('mpv', ''),data_dir=self.directory))
+        self.mode_labels = {'Audio clock (experimental)': 'audio-clock',
+                            'Video servo (experimental)': 'servo', 'Original timing (baseline)': 'baseline'}
+        saved_mode = self.settings.values.get('sync_mode', 'audio-clock')
+        self.sync_mode = tk.StringVar(value=next((k for k,v in self.mode_labels.items() if v == saved_mode), 'Audio clock (experimental)'))
+        self.receiver_address = tk.StringVar()
+        self.receiver_text = tk.StringVar(value='Receiver processing delay: unmeasured. Inspection does not apply a correction.')
         self.movie_path = tk.StringVar()
         self.audio_device = tk.StringVar()
         self.connection_text = tk.StringVar(value='Choose your HDMI audio output to begin.')
@@ -48,8 +54,8 @@ class DesktopWindow:
         self.audio_text = tk.StringVar(value='No movie loaded.')
         self.diagnostic_text = tk.StringVar(value='Start the TV connection to collect session diagnostics.')
         self.export_notice = tk.StringVar()
-        self.root.title(f'DualTheater Preview {VERSION} — Experimental beta')
-        self.root.geometry('930x700')
+        self.root.title(f'DualTheater Robust Sync {VERSION} — Experimental beta')
+        self.root.geometry('930x790')
         self.root.minsize(800, 610)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
         assets = Path(__file__).resolve().parent.parent / 'assets'
@@ -119,6 +125,11 @@ class DesktopWindow:
         self.refresh_button = ttk.Button(audio_row, text='Refresh', command=self.refresh_devices)
         self.refresh_button.pack(side='left')
         self.note(self.connect, 'Select the soundbar/receiver by name. Windows also lists speakers and other outputs; the app cannot certify TrueHD support from a device name.')
+        mode_row = ttk.Frame(self.connect); mode_row.pack(fill='x', pady=4)
+        ttk.Label(mode_row, text='Sync mode', width=12).pack(side='left')
+        self.mode_box = ttk.Combobox(mode_row, textvariable=self.sync_mode, values=list(self.mode_labels), state='readonly')
+        self.mode_box.pack(side='left', fill='x', expand=True)
+        self.note(self.connect, 'Compare modes with Video lead at 0 first. Each mode saves its own adjustment. Disconnect before changing mode.')
         row = ttk.Frame(self.connect)
         row.pack(fill='x', pady=(3, 12))
         self.start_button = ttk.Button(row, text='Start TV connection', command=self.start)
@@ -132,7 +143,7 @@ class DesktopWindow:
         ttk.Label(self.connect, textvariable=self.connection_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=6)
         self.pair_label = ttk.Label(self.connect, textvariable=self.pairing_text, style='Code.TLabel', wraplength=790)
         self.pair_label.pack(anchor='w', pady=5)
-        self.note(self.connect, 'On the TV, open DualTheater TV Beta and choose this computer. Enter the code once. Remembered TVs can reconnect automatically.')
+        self.note(self.connect, 'On the TV, open DualTheater TV Robust Sync and choose this computer. Enter the code once. Remembered TVs can reconnect automatically.')
 
     def _player_page(self):
         ttk.Label(self.player, textvariable=self.playback_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=(0, 12))
@@ -200,8 +211,18 @@ class DesktopWindow:
             self._queue('export_diagnostics', path=path)
 
     def _settings_page(self):
+        ttk.Label(self.options, text='Receiver information (read only)', style='Heading.TLabel').pack(anchor='w')
+        receiver_row = ttk.Frame(self.options); receiver_row.pack(fill='x', pady=5)
+        ttk.Entry(receiver_row, textvariable=self.receiver_address, width=18).pack(side='left', padx=(0, 8))
+        self.receiver_button = ttk.Button(receiver_row, text='Inspect LG S95TR',
+            command=lambda: self._queue('inspect_s95tr', address=self.receiver_address.get().strip()))
+        self.receiver_button.pack(side='left')
+        self.hdmi_button = ttk.Button(receiver_row, text='Inspect HDMI latency', command=lambda: self._queue('inspect_hdmi'))
+        self.hdmi_button.pack(side='left', padx=8)
+        self.note(self.options, 'Enter the soundbar’s private network address. Queries preserve all settings. HDMI declarations may describe a different video path.')
+        ttk.Label(self.options, textvariable=self.receiver_text, wraplength=790).pack(anchor='w', pady=(0, 8))
         ttk.Label(self.options, text='Lip-sync adjustment', style='Heading.TLabel').pack(anchor='w')
-        self.note(self.options, 'If sound arrives early, increase Video lead. If sound arrives late, decrease it. Save and resynchronize applies the offset through coordinated playback. Automatic calibration is not included.')
+        self.note(self.options, 'If sound arrives early, increase Video lead. If sound arrives late, decrease it. Save and resynchronize applies the offset through coordinated playback. The separate phone client can measure before applying a correction.')
         row = ttk.Frame(self.options)
         row.pack(fill='x', pady=5)
         ttk.Label(row, text='Video lead (ms)').pack(side='left')
@@ -255,12 +276,13 @@ class DesktopWindow:
         path = self.mpv_path.get().strip().strip('"')
         device = self.devices[index]['id']
         try:
-            self.settings.save(path, device)
+            self.settings.save(path, device, self.mode_labels[self.sync_mode.get()])
         except (OSError, ValueError, RuntimeError) as e:
             self.error_text.set(str(e))
             return
         self.error_text.set('')
-        self._queue('start', mpv=path, device=device)
+        self.offset_loaded = False
+        self._queue('start', mpv=path, device=device, sync_mode=self.mode_labels[self.sync_mode.get()])
 
     def stop(self):
         if self.status.get('file') and not messagebox.askyesno('Disconnect TV', 'Stop playback and disconnect the TV?', parent=self.root):
@@ -348,6 +370,15 @@ class DesktopWindow:
                         self.activity.start(12)
                     else:
                         self.activity.stop()
+                elif kind == 'receiver_information':
+                    if isinstance(value, dict):
+                        delay = value.get('added_av_delay_ms')
+                        self.receiver_text.set('LG AV-delay setting: ' + ('unknown' if delay is None else str(delay) + ' ms')
+                            + ' (community interpretation). Total processing delay remains unknown. No correction applied.')
+                    else:
+                        self.receiver_text.set(str(len(value)) + ' HDMI descriptors inspected. Declared audio delays: '
+                            + ', '.join('unknown' if row['audio_latency_ms'] is None else str(row['audio_latency_ms']) + ' ms' for row in value)
+                            + '. Route and processing-mode coverage are unverified. No correction applied.')
                 elif kind == 'error':
                     self.error_text.set(value)
                     if self.downloading:
@@ -424,7 +455,7 @@ class DesktopWindow:
             self.require_reload = True
             self.error_text.set('TV disconnected. Reconnect it, then reload the movie before resuming.')
         self.was_connected = connected
-        self.playback_text.set((value.get('file') or 'Choose a movie') + ' · ' + value['state'].replace('_', ' ').capitalize())
+        self.playback_text.set((value.get('file') or 'Choose a movie') + ' · ' + value['state'].replace('_', ' ').capitalize() + ' · ' + value.get('sync_mode', 'baseline'))
         position, duration = value.get('position_ms', 0), value.get('duration_ms', 0)
         if not self.dragging:
             self.timeline.configure(to=max(1, duration/1000))
@@ -434,13 +465,15 @@ class DesktopWindow:
             self.offset.set(str(round(value['video_lead_ms'])))
             self.offset_loaded = True
         drift, rtt = value['drift_ms'], value['clock_rtt_ms']
-        self.timing.configure(text=f"Estimated drift: {'—' if drift is None else f'{drift:.1f} ms'} · Clock RTT: {'—' if rtt is None else f'{rtt:.1f} ms'}")
+        profile_note = ' · Saved adjustment context changed; verify it' if value.get('offset_profile') == 'context_changed' else ''
+        self.timing.configure(text=f"Estimated drift: {'—' if drift is None else f'{drift:.1f} ms'} · Clock RTT: {'—' if rtt is None else f'{rtt:.1f} ms'}" + profile_note)
         report = value['diagnostics']
         telemetry, timing = report['telemetry'], report['timing']
         def metric(value, suffix=''):
             return '—' if value is None else f'{value:.1f}{suffix}'
         buffer_ms = telemetry['buffer_ahead_ms']
         self.diagnostic_text.set(
+            f"Sync: {value.get('sync_mode')} · Remote clock: {report.get('sync', {}).get('remote_clock_state', 'unknown')}\n"
             f"TV telemetry: {telemetry['status']} · Buffer ahead: {metric(buffer_ms / 1000 if buffer_ms is not None else None, ' s')}\n"
             f"Last measured transfer: {metric(telemetry['transfer_mbps'], ' Mbps')} · Sample age: {metric(telemetry['transfer_age_ms'] / 1000 if telemetry['transfer_age_ms'] is not None else None, ' s')} · Dropped frames: {metric(telemetry['dropped_video_frames'])}\n"
             f"Drift |p95|: {metric(timing['p95_absolute_drift_ms'], ' ms')} · Timing sample age: {metric(timing['last_sample_age_ms'], ' ms')}\n"
@@ -450,7 +483,8 @@ class DesktopWindow:
         self.diagnostic_preview.insert('1.0', json.dumps(report, indent=2, allow_nan=False))
         self.diagnostic_preview.configure(state='disabled')
         phone = value['phone_calibration']
-        self.phone_calibration_text.set('Phone calibration: ' + phone['state']
+        self.phone_calibration_text.set('Profile: ' + value.get('offset_profile', 'unknown')
+            + ' · Lead: ' + str(value['video_lead_ms']) + ' ms · Phone calibration: ' + phone['state']
             + (' · ' + phone['error'] if phone['error'] else '')
             + (' · No phone connected' if not phone['phone_connected'] else ' · Phone connected'))
         self.audio_text.set('TrueHD bitstream reported by mpv. Confirm Atmos on your receiver.' if value.get('audio', {}).get('valid') else 'TrueHD output has not been confirmed for this session.')
@@ -482,6 +516,10 @@ class DesktopWindow:
         for control in (self.mpv_entry, self.mpv_button, self.refresh_button, self.download_button):
             control.configure(state='normal' if setup else 'disabled')
         self.device_box.configure(state='readonly' if setup else 'disabled')
+        self.mode_box.configure(state='readonly' if setup else 'disabled')
+        inspect_ready = idle and self.status.get('state') not in ('playing', 'armed', 'loading', 'seeking')
+        self.receiver_button.configure(state='normal' if inspect_ready else 'disabled')
+        self.hdmi_button.configure(state='normal' if inspect_ready else 'disabled')
         self.start_button.configure(state='normal' if setup and self.devices else 'disabled')
         self.stop_button.configure(state='normal' if self.running and not self.closing else 'disabled')
         ready = idle and self.running and self.status.get('connected', False)
@@ -530,7 +568,7 @@ def smoke_test(path):
             assert window.mpv_path.get() == find_mpv(data_dir=directory)
             # Headless CI can legitimately have no WASAPI endpoints.
             download_check = 'passed'
-        for resource in ('controller.html', 'select_audio.lua'):
+        for resource in ('controller.html', 'select_audio.lua', 'audio_timing.lua'):
             assert Path(__file__).with_name(resource).is_file(), resource
         from .calibration import FIXTURE_SHA256
         import hashlib
@@ -583,7 +621,7 @@ def main():
     mutex = None
     try:
         if os.name == 'nt':
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('DualTheater.Desktop.Preview')
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('DualTheater.Desktop.RobustSync')
             from ctypes import wintypes
             kernel = ctypes.WinDLL('kernel32', use_last_error=True)
             kernel.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]

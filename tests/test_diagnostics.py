@@ -6,13 +6,46 @@ import time
 import unittest
 from unittest.mock import patch
 
-from host.diagnostics import SessionDiagnostics, save_report
+from host.diagnostics import SessionDiagnostics, save_report, receiver_report
 from host.desktop_support import runtime_args
 from host.server import HostRuntime
 import test_core
 
 
 class DiagnosticReportTests(unittest.TestCase):
+    def test_extended_timing_export_rejects_stale_or_malformed_feedback(self):
+        from types import SimpleNamespace
+        from host.server import ns
+        from host.timing import ClockEstimate
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = HostRuntime(runtime_args('unused', 'wasapi/test', directory, ephemeral=True))
+            app = runtime.app
+            now, offset = ns(), 8_000_000_000
+            clock = SimpleNamespace(best=lambda _: ClockEstimate(offset, 1_000_000, now))
+            app.peer = SimpleNamespace(closed=False, status_seen=now, clock=clock,
+                status={'epoch': app.epoch, 'remote_clock': {'state': 'locked', 'phase_error_ms': 2},
+                        'rendered_frame': {'epoch': app.epoch, 'release_ns': now + offset - 10_000_000,
+                                           'rendered_ns': now + offset}})
+            self.assertTrue(app.diagnostic_report()['sync']['rendered_callback_present'])
+            app.peer.status_seen -= 3_000_000_000
+            report = app.diagnostic_report()['sync']
+            self.assertFalse(report['rendered_callback_present'])
+            self.assertEqual(report['remote_clock_state'], 'unknown')
+            app.peer.status_seen = ns()
+            app.peer.status.update(remote_clock='malformed', rendered_frame=['malformed'])
+            json.dumps(app.diagnostic_report(), allow_nan=False)
+            app.peer = None
+            runtime.close()
+
+    def test_receiver_export_never_copies_raw_identifiers_or_unknown_latency(self):
+        secret = 'PRIVATE_RECEIVER_SENTINEL'
+        report = receiver_report({'inspect_s95tr': {'model': secret, 'address': secret,
+            'added_av_delay_ms': 50, 'total_processing_delay_ms': 0, 'serial': secret},
+            'inspect_hdmi': [{'audio_latency_ms': None, 'edid': secret, 'instance': secret}]})
+        self.assertNotIn(secret, json.dumps(report))
+        self.assertIsNone(report['lg_s95tr']['total_processing_delay_ms'])
+        self.assertIsNone(report['hdmi_declarations'][0]['audio_latency_ms'])
+
     def setUp(self):
         self.metrics = SessionDiagnostics()
         self.values = dict(state='playing', connected=True, status={'epoch': 4},
@@ -107,7 +140,7 @@ class DiagnosticReportTests(unittest.TestCase):
 class DiagnosticProtocolTests(unittest.TestCase):
     def test_fast_reconnect_cannot_leave_old_audio_running_with_a_new_tv_epoch(self):
         with tempfile.TemporaryDirectory() as directory:
-            runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', directory, ephemeral=True),
+            runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', directory, ephemeral=True, sync_mode='baseline'),
                                   mpv_factory=test_core.FakeMpv)
             tv = None
             def wait(predicate):
@@ -144,7 +177,7 @@ class DiagnosticProtocolTests(unittest.TestCase):
 
     def test_report_endpoint_is_local_authenticated_and_does_not_query_mpv(self):
         with tempfile.TemporaryDirectory() as directory:
-            runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', directory, ephemeral=True))
+            runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', directory, ephemeral=True, sync_mode='baseline'))
             try:
                 runtime.start()
                 app = runtime.app
@@ -174,7 +207,7 @@ class DiagnosticProtocolTests(unittest.TestCase):
 
     def test_real_coordinator_collects_timing_actions_failures_and_disconnects(self):
         with tempfile.TemporaryDirectory() as directory:
-            runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', directory, ephemeral=True),
+            runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', directory, ephemeral=True, sync_mode='baseline'),
                                   mpv_factory=test_core.FakeMpv)
             tv = None
             def wait(predicate):

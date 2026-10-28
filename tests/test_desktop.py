@@ -24,7 +24,7 @@ class DesktopSettingsTests(unittest.TestCase):
             original = settings_path.read_bytes()
             with patch.dict('os.environ', {'LOCALAPPDATA': directory}):
                 preview = default_data_dir()
-                self.assertEqual(preview, Path(directory)/'DualTheater-Preview')
+                self.assertEqual(preview, Path(directory)/'DualTheater-RobustSync')
                 settings = Settings(preview)
                 self.assertEqual(settings.values, {})
                 player = Path(directory)/'preview.exe'
@@ -82,7 +82,7 @@ class DesktopSettingsTests(unittest.TestCase):
 class RuntimeLifecycleTests(unittest.TestCase):
     def test_partial_bind_failure_closes_files_and_all_bound_sockets(self):
         with tempfile.TemporaryDirectory() as directory:
-            runtime=HostRuntime(runtime_args('unused.exe','wasapi/test',directory,ephemeral=True))
+            runtime=HostRuntime(runtime_args('unused.exe','wasapi/test',directory,ephemeral=True, sync_mode='baseline'))
             with patch('host.server.ThreadServer', side_effect=OSError('Port already used')):
                 with self.assertRaisesRegex(OSError,'Port already used'):
                     runtime.start()
@@ -95,7 +95,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
 
     def test_full_start_stop_releases_ports_and_preserves_pairings(self):
         with tempfile.TemporaryDirectory() as directory:
-            args=runtime_args('unused.exe','wasapi/test',directory,ephemeral=True)
+            args=runtime_args('unused.exe','wasapi/test',directory,ephemeral=True, sync_mode='baseline')
             runtime=HostRuntime(args)
             try:
                 runtime.start()
@@ -136,7 +136,7 @@ class DesktopTransportTests(unittest.TestCase):
             service=DesktopService(directory,runtime_factory=factory)
             tv=None
             try:
-                service.submit('start',mpv='unused.exe',device='wasapi/test')
+                service.submit('start',mpv='unused.exe',device='wasapi/test',sync_mode='baseline')
                 self.wait_event(service,'started')
                 app=service.runtime.app
                 tv=SimulatedTV(service.runtime.args.control_port,app.pair_token)
@@ -155,7 +155,7 @@ class DesktopTransportTests(unittest.TestCase):
                 self.assertFalse(tv.playing)
                 service.submit('action',action='offset',milliseconds=90)
                 self.wait_event(service,'action_done')
-                self.assertEqual(json.loads((Path(directory)/'calibration.json').read_text())['video_lead_ms'],90)
+                self.assertEqual(json.loads((Path(directory)/'calibration-baseline.json').read_text())['video_lead_ms'],90)
                 report_path = Path(directory)/'report.json'
                 service.submit('export_diagnostics', path=str(report_path))
                 self.wait_event(service, 'diagnostics_exported')

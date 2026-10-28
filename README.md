@@ -6,7 +6,7 @@
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
-**Unreleased development:** `feature/playback-reliability` builds Windows/TV version `0.5.0-beta.2` with diagnostics, sanitized report export, restart protection and the first **DualTheater Calibration Preview** phone client (`0.1.0-beta.1`). The phone uses flash/beep capture timestamps without requiring a separate physical reference fixture. A separate `feature/robust-sync` branch was created from `main` with those prerequisites carried over; its [sync architecture research and selected candidates](docs/sync-research.md) are complete, but the new timing engine and distinct comparison builds are not implemented yet. These features are not in the downloadable `0.4.1-beta.1` builds below. The base build and published assets are preserved. See [phone calibration setup](docs/phone-calibration.md) and [diagnostics instructions](docs/diagnostics.md).
+**Unreleased Robust Sync branch:** `feature/robust-sync` builds Windows/TV `0.6.0-beta.1` with selectable **Original timing**, **Video servo** and **Audio clock** modes, separate saved offsets, source-timestamped audio, an authenticated timing connection, rendered-frame diagnostics and read-only LG S95TR/HDMI latency inspection. It includes the optional phone client `0.1.1-beta.1` for measuring before applying a correction. See the [installation and comparison guide](docs/robust-sync.md). The earlier `feature/playback-reliability` preview and base apps/releases remain unchanged. These experimental changes are not in the downloadable `0.4.1-beta.1` builds below, and improved physical sync is not yet established.
 
 ## Download
 
@@ -93,7 +93,7 @@ Keep the Windows app open throughout playback. Check the TV's active HDR indicat
 
 ## Operating the player
 
-The instructions in this section describe the published `0.4.1-beta.1` build. The development branch adds a **Diagnostics** page and **Export sanitized report…**; see the [feature guide](docs/diagnostics.md). Its separate paired phone client can start a reference test and suggest a saved lip-sync correction; follow [phone calibration instructions](docs/phone-calibration.md). After a TV reconnect or calibration test, reload the movie before playback.
+The instructions in this section describe the published `0.4.1-beta.1` build. The separate Robust Sync branch adds selectable timing modes on **Connect** (disconnect before changing), independent zero-default offsets, receiver inspection on **Settings & help**, and a **Diagnostics** page and **Export sanitized report…**; see the [comparison guide](docs/robust-sync.md) and [diagnostics guide](docs/diagnostics.md). Its separate paired phone client can start a reference test and suggest a saved lip-sync correction; follow [phone calibration instructions](docs/phone-calibration.md). After a TV reconnect or calibration test, reload the movie before playback.
 
 | Task | In the Windows app |
 | --- | --- |
@@ -163,7 +163,7 @@ The current target is an ordinary single-timeline MKV. Subtitles, playlists, vid
 
 For ongoing development or a new Codex session, start with [project context](docs/context.md) and follow [AGENTS.md](AGENTS.md). Updating the shared context after meaningful changes and before handoffs is mandatory. Whenever a project change makes installation or operating instructions outdated, update the affected README instructions in that same change before publishing.
 
-This feature branch builds a separate `0.5.0-beta.2` candidate. Its **DualTheater Preview** desktop uses `%LOCALAPPDATA%\DualTheater-Preview` for settings, pairing, calibration, logs and managed players, leaving the base desktop's profile intact. **DualTheater TV Preview** uses a separate Android package (`dev.dualtheater.tv.preview`) and can be installed alongside the base TV app without replacing its settings. Keep build outputs separate from the base EXE/APK and use a matching branch-built host/TV app together. Only run one host at a time. The candidate has not been published or physically validated.
+This branch builds **Robust Sync 0.6.0-beta.1**. The desktop uses `%LOCALAPPDATA%\DualTheater-RobustSync`, and **DualTheater TV Robust Sync** uses `dev.dualtheater.tv.robustsync`, preserving both earlier apps/profiles. Use a matching branch-built host/TV pair and run one host at a time. The optional phone build is `0.1.1-beta.1`. Follow the [installation and zero-offset comparison guide](docs/robust-sync.md). The candidate has not been published or physically validated.
 
 To build the Windows EXE from source on Windows with Python 3.11 x64:
 

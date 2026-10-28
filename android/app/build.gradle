@@ -4,11 +4,11 @@ android {
     compileSdk 36
     buildToolsVersion '36.1.0'
     defaultConfig {
-        applicationId 'dev.dualtheater.tv.preview'
+        applicationId 'dev.dualtheater.tv.robustsync'
         minSdk 26
         targetSdk 34
-        versionCode 9
-        versionName '0.5.0-beta.2'
+        versionCode 10
+        versionName '0.6.0-beta.1'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

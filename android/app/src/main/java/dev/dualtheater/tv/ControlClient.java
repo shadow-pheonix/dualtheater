@@ -31,6 +31,7 @@ final class ControlClient implements AutoCloseable {
                 s.setSoTimeout(4000);
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
                 JSONObject hello = new JSONObject().put("op", "hello").put("version", 1)
+                    .put("timing_protocol", 2)
                     .put("remote_controls", true)
                     .put("client_id", clientId)
                     .put("token", token).put("device", android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);

@@ -16,7 +16,7 @@ from . import __version__
 from .diagnostics import save_report
 
 VERSION = __version__
-PROFILE_NAME = 'DualTheater-Preview'
+PROFILE_NAME = 'DualTheater-RobustSync'
 
 
 def default_data_dir():
@@ -49,11 +49,11 @@ class Settings:
                 value = json.loads(self.path.read_text(encoding='utf-8'))
                 if not isinstance(value, dict):
                     raise ValueError('Expected a JSON object')
-                self.values = {key: value[key] for key in ('mpv', 'device') if isinstance(value.get(key), str)}
+                self.values = {key: value[key] for key in ('mpv', 'device', 'sync_mode') if isinstance(value.get(key), str)}
             except (OSError, ValueError):
                 self.warning = 'Saved audio setup could not be read. Choose mpv and HDMI audio again.'
 
-    def save(self, mpv, device):
+    def save(self, mpv, device, sync_mode='audio-clock'):
         if not Path(mpv).is_file() or not device.startswith('wasapi/'):
             raise ValueError('Choose an existing mpv executable and a WASAPI audio device.')
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -64,7 +64,9 @@ class Settings:
                 raise RuntimeError('An unreadable settings backup already exists; preserve it before saving again.')
             self.path.replace(backup)
         temporary = self.path.with_suffix('.tmp')
-        self.values = {'mpv': str(Path(mpv).resolve()), 'device': device}
+        if sync_mode not in ('baseline', 'servo', 'audio-clock'):
+            raise ValueError('Select a supported sync mode')
+        self.values = {'mpv': str(Path(mpv).resolve()), 'device': device, 'sync_mode': sync_mode}
         temporary.write_text(json.dumps(self.values, indent=2), encoding='utf-8')
         os.replace(temporary, self.path)
         self.warning = ''
@@ -100,9 +102,9 @@ def list_devices(executable, allow_empty=False):
     return devices
 
 
-def runtime_args(mpv, device, directory, ephemeral=False):
+def runtime_args(mpv, device, directory, ephemeral=False, sync_mode='audio-clock'):
     return argparse.Namespace(mpv=str(mpv), device=device, data_dir=str(directory),
-                              diagnostic=False, host=lan_address(),
+                              diagnostic=False, host=lan_address(), sync_mode=sync_mode,
                               ui_port=0 if ephemeral else 8764, media_port=0 if ephemeral else 8765,
                               control_port=0 if ephemeral else 8766,
                               discovery_port=0 if ephemeral else 8767)
@@ -121,6 +123,7 @@ class DesktopService:
         self.directory = Path(directory)
         self.runtime_factory = runtime_factory
         self.runtime = None
+        self.receiver_info = {}
         self.commands = queue.Queue(maxsize=8)
         self.events = queue.Queue()
         self.closed = threading.Event()
@@ -159,7 +162,9 @@ class DesktopService:
                 elif operation == 'start':
                     if self.runtime:
                         raise RuntimeError('Stop the connection before changing audio setup.')
-                    runtime = self.runtime_factory(runtime_args(values['mpv'], values['device'], self.directory))
+                    runtime = self.runtime_factory(runtime_args(values['mpv'], values['device'], self.directory,
+                        sync_mode=values.get('sync_mode', 'audio-clock')))
+                    runtime.app.receiver_observations.update(self.receiver_info)
                     runtime.start()
                     self.runtime = runtime
                     self.events.put(('started', None))
@@ -173,6 +178,15 @@ class DesktopService:
                         raise RuntimeError('Start the TV connection before exporting diagnostics.')
                     save_report(values['path'], self.runtime.app.diagnostic_report())
                     self.events.put(('diagnostics_exported', None))
+                elif operation in ('inspect_s95tr', 'inspect_hdmi'):
+                    from .receiver import inspect_s95tr, inspect_hdmi
+                    if self.runtime and self.runtime.app.state in ('playing', 'armed', 'loading', 'seeking'):
+                        raise RuntimeError('Pause playback before inspecting receiver information')
+                    result = inspect_s95tr(values['address']) if operation == 'inspect_s95tr' else inspect_hdmi()
+                    self.receiver_info[operation] = result
+                    if self.runtime:
+                        self.runtime.app.receiver_observations[operation] = result
+                    self.events.put(('receiver_information', result))
                 elif operation in ('stop', 'close'):
                     runtime, self.runtime = self.runtime, None
                     if runtime:

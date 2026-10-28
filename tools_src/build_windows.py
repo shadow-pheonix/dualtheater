@@ -46,7 +46,7 @@ metadata.write_text(f'''VSVersionInfo(
     VarFileInfo([VarStruct('Translation', [1033, 1200])])])
 ''',encoding='utf-8')
 command += ['--version-file',str(metadata)]
-for source, destination in ((root/'host/controller.html','host'),(root/'host/select_audio.lua','host'),
+for source, destination in ((root/'host/controller.html','host'),(root/'host/select_audio.lua','host'),(root/'host/audio_timing.lua','host'),
                             (root/'calibration-phone-SDR-TrueHD.mkv','.'),
                             (root/'assets/dualtheater.ico','assets'),(root/'assets/dualtheater.png','assets'),
                             (root/'THIRD_PARTY_NOTICES.md','.'),(licenses,'licenses')):

@@ -24,8 +24,9 @@ from .mpv import Mpv
 from .sync import ClockFilter, VideoServo, parse_range
 from .pairing import PairingStore
 from .discovery import DiscoveryServer, DISCOVERY_PORT
-from .diagnostics import SessionDiagnostics
+from .diagnostics import SessionDiagnostics, receiver_report
 from .calibration import CalibrationService
+from .timing import AffineClock, AudioTimeline, AdaptiveServo
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -55,6 +56,9 @@ class Peer:
         self.last_remote_id = 0
         self.remote_controls = False
         self.local_host = sock.getsockname()[0]
+        self.timing_token = secrets.token_urlsafe(32)
+        self.timing = None
+        self.timing_protocol = False
 
     def send(self, msg):
         with self.lock:
@@ -91,11 +95,40 @@ class Peer:
         except OSError:
             pass
         self.sock.close()
+        if self.timing:
+            self.timing.close()
+
+
+class TimingLink:
+    """One TV-session-bound duplex timing stream; no transport commands."""
+    def __init__(self, sock):
+        self.sock = sock
+        self.sock.settimeout(.5)
+        self.lock = threading.Lock()
+        self.closed = False
+
+    def send(self, message):
+        with self.lock:
+            if self.closed:
+                raise ConnectionError('Timing connection closed')
+            if message.get('op') == 'ping':
+                message = dict(message, t0=ns())
+            self.sock.sendall((json.dumps(message, separators=(',', ':')) + '\n').encode())
+
+    def close(self):
+        self.closed = True
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
 
 class Coordinator:
     def __init__(self, args, mpv_factory=Mpv):
         self.args, self.mpv_factory = args, mpv_factory
+        self.sync_mode = getattr(args, 'sync_mode', 'baseline')
+        if self.sync_mode not in ('baseline', 'servo', 'audio-clock'):
+            raise ValueError('Unknown sync mode')
         self.pair_token = secrets.token_hex(6)
         self.pair_code = f'{secrets.randbelow(1000000):06d}'
         self.host_name = socket.gethostname()[:63]
@@ -109,20 +142,33 @@ class Coordinator:
         self.state = 'idle'
         self.error = ''
         self.offset_ms = 0.0
+        self.offset_source = 'zero_default'
+        self.offset_context = None
+        self.receiver_observations = {}
+        self.video_context = {}
         self.anchor_ms = 0.0
         self.duration_ms = 0.0
-        self.offset_file = self.data_dir / 'calibration.json'
+        self.offset_file = self.data_dir / f'calibration-{self.sync_mode}.json'
         if self.offset_file.exists():
             try:
-                self.offset_ms = finite(json.loads(self.offset_file.read_text())['video_lead_ms'], -2000, 2000)
+                saved = json.loads(self.offset_file.read_text())
+                self.offset_ms = finite(saved['video_lead_ms'], -2000, 2000)
+                self.offset_source = saved.get('source', 'manual') if saved.get('source') in ('manual', 'phone') else 'manual'
+                self.offset_context = saved.get('context')
             except (ValueError, KeyError, OSError):
                 pass
         self.audio_info = {}
         self.audio_sample = {}
         self.drift_ms = None
         self.speed = 1.0
+        self.playback_lead_ms = self.offset_ms
         self.last_correction = 0
-        self.servo = VideoServo()
+        self.servo = VideoServo() if self.sync_mode == 'baseline' else AdaptiveServo()
+        self.audio_running = threading.Event()
+        self.latest_anchor = None
+        self.timing_error = ''
+        self.last_frame_key = None
+        self.started_ns = 0
         self.diagnostics = SessionDiagnostics()
         self.calibration = CalibrationService(self, ROOT / 'calibration-phone-SDR-TrueHD.mkv')
         self.recoveries = deque()
@@ -160,17 +206,64 @@ class Coordinator:
                 'pair_token': self.pair_token, 'diagnostic': self.args.diagnostic,
                 'pair_code': self.pair_code, 'host_name': self.host_name,
                 'diagnostics': self.diagnostic_report(),
-                'phone_calibration': self.calibration.snapshot(),
+                'phone_calibration': self.calibration.snapshot(), 'sync_mode': self.sync_mode,
+                'offset_source': self.offset_source, 'offset_profile': self.offset_profile_status(),
                 'audio_tracks': self.mpv.get('track-list', []) if self.mpv and self.state not in ('loading', 'seeking') else []}
 
     def diagnostic_report(self):
         # This path performs no mpv IPC and never copies a raw snapshot/log.
         p = self.peer
         status_seen = p.status_seen if p else None
-        return self.diagnostics.report(
+        report = self.diagnostics.report(
             state=self.state, connected=bool(p and not p.closed), status=p.status if p else {},
             status_age_ms=(ns() - status_seen) / 1e6 if status_seen is not None else None,
             epoch=self.epoch, audio=self.audio_info, video_lead_ms=self.offset_ms)
+        from .diagnostics import number, vocabulary
+        report['sync'] = {'mode': self.sync_mode, 'offset_source': self.offset_source,
+                         'offset_profile': self.offset_profile_status(),
+                         'active_video_lead_ms': self.playback_lead_ms,
+                         'drift_basis': 'scheduled_release' if self.sync_mode == 'baseline' else 'media_timeline',
+                         'physical_accuracy': 'unvalidated'}
+        clock = p.clock.best(ns()) if p else None
+        fresh = (p and not p.closed and status_seen is not None
+                 and 0 <= ns() - status_seen <= 2_000_000_000 and p.status.get('epoch') == self.epoch)
+        remote = p.status.get('remote_clock') if fresh else None
+        remote = remote if isinstance(remote, dict) else {}
+        observed = p.status.get('rendered_frame') if fresh else None
+        event_ns = observed.get('rendered_ns') if isinstance(observed, dict) else None
+        event_host = (clock.host(event_ns) if hasattr(clock, 'host') else event_ns - clock.offset_ns
+                      ) if clock is not None and type(event_ns) is int else None
+        if (not isinstance(observed, dict) or observed.get('epoch') != self.epoch
+            or event_host is None or not 0 <= ns() - event_host <= 2_000_000_000):
+            observed = {}
+        report['sync'].update(clock_uncertainty_ms=number(clock.uncertainty_ns / 1e6, 0)
+                if hasattr(clock, 'uncertainty_ns') else None,
+            clock_rate_ppm=number((clock.rate - 1) * 1e6) if hasattr(clock, 'rate') else None,
+            remote_clock_state=vocabulary(remote.get('state'),
+                ('paused', 'acquiring', 'locked', 'slewing', 'holdover', 'audio_anchor_expired', 'audio_phase_jump')),
+            remote_clock_phase_ms=number(remote.get('phase_error_ms')),
+            rendered_callback_present=bool(observed),
+            release_to_render_ms=number((observed['rendered_ns'] - observed['release_ns']) / 1e6, 0, 500)
+                if type(observed.get('rendered_ns')) is int and type(observed.get('release_ns')) is int else None)
+        report['receiver'] = receiver_report(self.receiver_observations)
+        return report
+
+    def profile_context(self):
+        status = self.peer.status if self.peer else {}
+        frame = status.get('frame') or {}
+        if frame.get('mime'):
+            self.video_context = {k: frame.get(k) for k in ('mime', 'width', 'height', 'color')}
+        return {'sync_mode': self.sync_mode,
+                'video': self.video_context.copy(),
+                'audio_format': self.audio_info.get('format'),
+                'receiver': self.receiver_observations.get('inspect_s95tr')}
+
+    def offset_profile_status(self):
+        if self.offset_source == 'zero_default':
+            return 'unmeasured'
+        if not self.offset_context:
+            return 'context_unknown'
+        return 'context_matches' if self.offset_context == self.profile_context() else 'context_changed'
 
     def tv(self):
         if not self.peer or self.peer.closed:
@@ -180,6 +273,8 @@ class Coordinator:
         return self.peer
 
     def pause_both(self, reason='paused'):
+        self.audio_running.clear()
+        self.latest_anchor = None
         self.epoch += 1
         if self.mpv:
             if self.state == 'playing':
@@ -190,6 +285,7 @@ class Coordinator:
         self.state = reason
         self.speed = 1.0
         self.servo.reset()
+        self.last_frame_key = None
 
     def fail(self, message):
         self.diagnostics.error()
@@ -240,6 +336,7 @@ class Coordinator:
         if self.mpv:
             self.mpv.close()
         self.media = media
+        self.video_context = {}
         self.anchor_ms = 0
         self.media_token = secrets.token_urlsafe(24)
         self.mpv = self.mpv_factory(self.args.mpv, self.args.device, self.log_dir, self.args.diagnostic)
@@ -273,6 +370,11 @@ class Coordinator:
         if not self.mpv or not self.media:
             raise RuntimeError('Load a file first')
         p = self.tv()
+        if self.sync_mode != 'baseline' and not p.timing_protocol:
+            raise RuntimeError('This sync mode requires the matching Robust Sync TV app')
+        if self.sync_mode != 'baseline':
+            self.wait_for(lambda q: q.timing and not q.timing.closed, seconds=5)
+            self.timing_error = ''
         self.wait_for(lambda p: p.clock.best(ns()) is not None, seconds=8)
         self.audio_info = self.mpv.verify()
         if not prepared:
@@ -285,9 +387,16 @@ class Coordinator:
         # Offset is made with separate start deadlines, including at media time zero.
         # Positive lead starts video first; negative lead starts audio first.
         start_at = ns() + 1_000_000_000
+        self.playback_lead_ms = self.offset_ms
         video_at = start_at + round(max(0, -self.offset_ms) * 1e6)
         audio_at = start_at + round(max(0, self.offset_ms) * 1e6)
-        p.request('arm', epoch=self.epoch, host_ns=video_at, offset_ns=clock.offset_ns)
+        arm = dict(epoch=self.epoch, host_ns=video_at, offset_ns=clock.offset_ns)
+        if self.sync_mode != 'baseline':
+            if clock.uncertainty_ns > 12_000_000:
+                raise RuntimeError('Clock uncertainty exceeds 12 ms; improve the LAN connection')
+            arm.update(video_ns=clock.remote(video_at), audio_ns=clock.remote(audio_at),
+                       position_ms=self.anchor_ms, video_lead_ms=self.offset_ms)
+        p.request('arm', **arm)
         if ns() > start_at - 300_000_000:
             raise RuntimeError('Start acknowledgement arrived too late; press Play again')
         self.state = 'armed'
@@ -298,6 +407,7 @@ class Coordinator:
         while ns() < finish_at:
             if not audio_started and ns() >= audio_at:
                 self.mpv.pause(False)
+                self.audio_running.set()
                 audio_started = True
             if self.cancel.wait(.002 if ns() >= start_at else .01):
                 raise RuntimeError('Start cancelled')
@@ -307,9 +417,82 @@ class Coordinator:
                 raise RuntimeError('TV became unready before start')
         if not audio_started:
             self.mpv.pause(False)
+            self.audio_running.set()
+        if self.sync_mode != 'baseline':
+            self.verify_progress(p, video_at)
         self.state = 'playing'
+        self.started_ns = ns()
         self.last_correction = ns()
         self.log('Started epoch ' + str(self.epoch))
+
+    def verify_progress(self, peer, video_at):
+        """An armed deadline is not proof of either device advancing."""
+        first = None
+        deadline = ns() + 3_000_000_000
+        while ns() < deadline:
+            if self.cancel.wait(.025) or self.stop.is_set():
+                raise RuntimeError('Start cancelled')
+            if self.timing_error:
+                raise RuntimeError(self.timing_error)
+            s = peer.status
+            if peer.closed or s.get('error') or s.get('state') == 'buffering':
+                raise RuntimeError('Playback became unavailable during start verification')
+            anchor = self.latest_anchor
+            frame = s.get('frame', {})
+            clock = peer.clock.best(ns())
+            fresh = (anchor and anchor.get('epoch') == self.epoch and s.get('epoch') == self.epoch
+                     and s.get('playing') and frame.get('valid') and frame.get('epoch') == self.epoch
+                     and clock is not None
+                     and frame.get('release_ns', 0) > clock.remote(video_at)
+                     and frame.get('sequence', 0) > 0)
+            if fresh:
+                point = (anchor['position_ms'], frame['position_ms'], frame['sequence'])
+                if first is None:
+                    first = point
+                elif point[0] - first[0] >= 20 and point[1] - first[1] >= 20 and point[2] > first[2]:
+                    if self.sync_mode == 'audio-clock' and not s.get('remote_clock', {}).get('reads_recent'):
+                        continue
+                    return
+        raise RuntimeError('Scheduled start did not produce fresh audio and video progress')
+
+    def sample_audio(self):
+        """Dedicated source sampler, independent of the host operation/UI loops."""
+        model, model_epoch = AudioTimeline(), -1
+        while not self.stop.wait(.04):
+            if self.sync_mode == 'baseline' or not self.audio_running.is_set():
+                model.reset()
+                continue
+            epoch, mpv, peer = self.epoch, self.mpv, self.peer
+            if epoch != model_epoch:
+                model.reset(); model_epoch = epoch
+            if not mpv or not peer or peer.closed:
+                continue
+            try:
+                sample = mpv.timed_audio_sample()
+                if self.epoch != epoch or self.mpv is not mpv or not self.audio_running.is_set():
+                    continue
+                anchor = model.add(sample)
+                if anchor is None:
+                    continue
+                if anchor['uncertainty_ms'] > 10:
+                    continue
+                clock = peer.clock.best(ns())
+                if clock is None or clock.uncertainty_ns > 12_000_000:
+                    raise RuntimeError('Remote clock uncertainty exceeded its budget')
+                if ns() - anchor['host_ns'] > 250_000_000:
+                    raise RuntimeError('Source audio samples are too old')
+                anchor.update(epoch=epoch)
+                self.latest_anchor = anchor
+                if not peer.timing or peer.timing.closed:
+                    raise RuntimeError('Dedicated timing connection lost')
+                peer.timing.send(dict(op='anchor', epoch=epoch, sequence=anchor['sequence'],
+                    local_ns=clock.remote(anchor['host_ns']),
+                    position_ms=anchor['position_ms'] + self.playback_lead_ms,
+                    rate=anchor['rate'] / clock.rate,
+                    uncertainty_ms=anchor['uncertainty_ms'] + clock.uncertainty_ns / 1e6))
+            except Exception as e:
+                if self.epoch == epoch and self.audio_running.is_set():
+                    self.timing_error = str(e)
 
     def action(self, body):
         action = body.get('action')
@@ -342,13 +525,17 @@ class Coordinator:
                         self.start(prepared=True)
                 elif action == 'offset':
                     value = finite(body['milliseconds'], -2000, 2000)
+                    source = 'phone' if body.get('source') == 'phone' else 'manual'
+                    context = self.profile_context()
                     temporary = self.offset_file.with_suffix('.tmp')
                     try:
-                        temporary.write_text(json.dumps({'video_lead_ms': value}), encoding='utf-8')
+                        temporary.write_text(json.dumps({'video_lead_ms': value, 'source': source,
+                                                        'context': context}), encoding='utf-8')
                         os.replace(temporary, self.offset_file)
                     finally:
                         temporary.unlink(missing_ok=True)
                     self.offset_ms = value
+                    self.offset_source, self.offset_context = source, context
                     self.servo.reset()
                     self.log(f'Video lead set to {self.offset_ms:.1f} ms')
                 elif action == 'track':
@@ -378,11 +565,14 @@ class Coordinator:
                 self.diagnostics.operation(action, (ns() - operation_started) / 1e6, failed)
 
     def heartbeat(self):
-        while not self.stop.wait(.5):
+        while not self.stop.wait(.5 if self.sync_mode == 'baseline' else .2):
             p = self.peer
             if p and not p.closed:
                 try:
-                    p.send({'op': 'ping', 't0': ns()})
+                    if self.sync_mode == 'baseline':
+                        p.send({'op': 'ping', 't0': ns()})
+                    elif p.timing and not p.timing.closed:
+                        p.timing.send({'op': 'ping'})
                     if p.remote_controls:
                         p.send(self.playback_status())
                 except OSError:
@@ -463,6 +653,8 @@ class Coordinator:
                 if self.state != 'playing':
                     continue
                 p = self.tv()
+                if self.sync_mode != 'baseline' and self.timing_error:
+                    raise RuntimeError(self.timing_error)
                 s = p.status
                 if s.get('epoch') != self.epoch:
                     raise RuntimeError('TV playback generation changed; reconnect and reload the movie')
@@ -478,7 +670,9 @@ class Coordinator:
                     continue
                 if not s.get('playing', False):
                     raise RuntimeError('TV stopped unexpectedly; playback paused')
-                sample = self.mpv.audio_sample()
+                sample = self.mpv.audio_sample() if self.sync_mode == 'baseline' else self.latest_anchor
+                if sample is None or self.sync_mode != 'baseline' and ns() - sample['host_ns'] > 750_000_000:
+                    raise RuntimeError('Source audio timeline expired')
                 self.audio_sample = sample
                 if sample['position_ms'] is None:
                     if now - self.last_correction > 3_000_000_000:
@@ -495,7 +689,15 @@ class Coordinator:
                     if now - self.last_correction > 3_000_000_000:
                         raise RuntimeError('Fresh frame timing unavailable; cannot maintain sync')
                     continue
-                release_host = frame['release_ns'] - clock.offset_ns
+                if self.sync_mode != 'baseline':
+                    key = (self.epoch, frame.get('sequence'))
+                    if key == self.last_frame_key:
+                        if now - self.last_correction > 1_000_000_000:
+                            raise RuntimeError('Unique video frame telemetry stalled')
+                        continue
+                    self.last_frame_key = key
+                release_host = (frame['release_ns'] - clock.offset_ns if self.sync_mode == 'baseline'
+                                else clock.host(frame.get('presentation_ns', frame['release_ns'])))
                 if abs(now - release_host) > 500_000_000:
                     if now - self.last_correction > 3_000_000_000:
                         raise RuntimeError('Video frame telemetry stalled')
@@ -504,9 +706,32 @@ class Coordinator:
                     if now - self.last_correction > 3_000_000_000:
                         raise RuntimeError('Clock measurements too uncertain to maintain sync')
                     continue
-                video_ms = frame['position_ms'] + (sample['host_ns'] - release_host) / 1e6 * s.get('speed', 1)
-                self.drift_ms = video_ms - (sample['position_ms'] + self.offset_ms)
-                speed, hard = self.servo.update(self.drift_ms)
+                if self.sync_mode == 'baseline':
+                    video_ms = frame['position_ms'] + (sample['host_ns'] - release_host) / 1e6 * s.get('speed', 1)
+                else:
+                    # Compare media timelines. A codec release may precede VSYNC;
+                    # never feed that scheduler lead back as a physical correction.
+                    status_host = clock.host(s['sample_ns'])
+                    if abs(ns() - status_host) > 500_000_000:
+                        raise RuntimeError('Video timeline observation expired')
+                    video_ms = s['position_ms'] + (sample['host_ns'] - status_host) / 1e6 * s.get('speed', 1)
+                lead = self.playback_lead_ms if self.sync_mode == 'audio-clock' else self.offset_ms
+                self.drift_ms = video_ms - (sample['position_ms'] + lead)
+                if self.sync_mode == 'baseline':
+                    speed, hard = self.servo.update(self.drift_ms)
+                elif self.sync_mode == 'audio-clock':
+                    remote = s.get('remote_clock', {})
+                    if remote.get('state') in ('audio_anchor_expired', 'audio_phase_jump'):
+                        raise RuntimeError('TV remote audio clock lost confidence')
+                    if not remote.get('reads_recent') or abs(remote.get('renderer_error_ms', 1000)) > 50:
+                        raise RuntimeError('TV renderer is not following the remote audio clock')
+                    # Independent frame observations are diagnostic only here.
+                    speed, hard = 1.0, False
+                else:
+                    speed, hard = self.servo.update(self.drift_ms, sample['host_ns'],
+                        sample['uncertainty_ms'] + clock.uncertainty_ns / 1e6)
+                    if speed is None:
+                        continue
                 self.diagnostics.timing(self.drift_ms, clock.rtt_ns / 1e6, sample['uncertainty_ms'])
                 self.csv.writerow([sample['host_ns'], self.epoch, sample['position_ms'], video_ms,
                                    self.drift_ms, speed, clock.rtt_ns / 1e6, sample['uncertainty_ms']])
@@ -514,7 +739,7 @@ class Coordinator:
                 self.last_correction = now
                 if hard:
                     self.recover(sample['position_ms'], f'Sustained {self.drift_ms:.0f} ms drift', 'drift')
-                elif abs(speed - self.speed) > .0001:
+                elif self.sync_mode != 'audio-clock' and abs(speed - self.speed) > .0001:
                     p.request('speed', epoch=self.epoch, value=speed)
                     self.speed = speed
             except Exception as e:
@@ -568,6 +793,9 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 return
             if hello.get('op') != 'hello' or hello.get('version') != 1:
                 return
+            if hello.get('role') == 'timing':
+                self.handle_timing(hello)
+                return
             try:
                 trusted_token = app.pairings.authenticate(hello.get('token'), hello.get('client_id'),
                     hello.get('device', 'Android TV'), app.pair_token, app.pair_code, self.client_address[0])
@@ -584,9 +812,13 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 return
             peer = Peer(self.request, self.rfile)
             peer.remote_controls = hello.get('remote_controls') is True
+            peer.timing_protocol = hello.get('timing_protocol') == 2
+            if app.sync_mode != 'baseline':
+                peer.clock = AffineClock()
             app.peer = peer
             welcome = {'op': 'welcome', 'version': 1, 'remote_controls': True,
-                       'host_id': app.pairings.host_id, 'host_name': app.host_name}
+                       'host_id': app.pairings.host_id, 'host_name': app.host_name,
+                       'sync_mode': app.sync_mode, 'timing_token': peer.timing_token}
             if trusted_token:
                 welcome['trusted_token'] = trusted_token
             peer.send(welcome)
@@ -598,7 +830,7 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 t3 = ns()
                 msg = json.loads(raw)
                 peer.seen = t3
-                if msg.get('op') == 'pong':
+                if msg.get('op') == 'pong' and app.sync_mode == 'baseline':
                     peer.clock.add(int(msg['t0']), int(msg['t1']), int(msg['t2']), t3)
                 elif msg.get('op') == 'status':
                     peer.status = msg
@@ -617,6 +849,41 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 peer.close()
                 app.diagnostics.disconnected()
                 app.log('TV disconnected')
+
+    def handle_timing(self, hello):
+        app, link = self.server.app, None
+        peer = app.peer
+        if (not peer or peer.closed or app.sync_mode == 'baseline' or not peer.timing_protocol
+            or not isinstance(hello.get('token'), str)
+            or not hmac.compare_digest(hello['token'], peer.timing_token)):
+            return
+        # Only the accepted control session can authorize this stream. Pairing
+        # credentials/codes cannot be used to open a free-standing timing role.
+        with peer.lock:
+            if peer.timing and not peer.timing.closed:
+                return
+            link = TimingLink(self.request)
+            peer.timing = link
+        try:
+            link.send({'op': 'timing_ready', 'version': 2})
+            while not app.stop.is_set() and app.peer is peer and not peer.closed:
+                raw = self.rfile.readline(4097)
+                if not raw or len(raw) > 4096:
+                    break
+                t3 = ns()
+                msg = json.loads(raw)
+                if msg.get('op') != 'pong':
+                    break
+                # Reject unsolicited future exchanges as well as replay.
+                if not t3 - 1_000_000_000 <= msg.get('t0', -1) <= t3:
+                    break
+                peer.clock.add(msg['t0'], msg['t1'], msg['t2'], t3)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        finally:
+            link.close()
+            if app.peer is peer and app.audio_running.is_set():
+                app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
 
     def handle_calibration(self, trusted_token):
         app = self.server.app
@@ -807,7 +1074,7 @@ class HostRuntime:
                 thread = threading.Thread(target=service.serve_forever, daemon=True)
                 thread.start()
                 self.serving.append(service)
-            for target in (self.app.monitor, self.app.heartbeat, self.app.remote_worker):
+            for target in (self.app.monitor, self.app.heartbeat, self.app.remote_worker, self.app.sample_audio):
                 threading.Thread(target=target, daemon=True).start()
             try:
                 self.discovery = DiscoveryServer(self.app, port=self.args.discovery_port)
@@ -842,7 +1109,10 @@ def main():
     parser.add_argument('--media-port', type=int, default=8765)
     parser.add_argument('--control-port', type=int, default=8766)
     parser.add_argument('--discovery-port', type=int, default=DISCOVERY_PORT)
-    parser.add_argument('--data-dir', help='Private settings/log directory (default: source folder)')
+    parser.add_argument('--data-dir', default=str(Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData/Local') / 'DualTheater-RobustSync'),
+                        help='Private settings/log directory (default: DualTheater-RobustSync app data)')
+    parser.add_argument('--sync-mode', choices=('baseline', 'servo', 'audio-clock'), default='audio-clock',
+                        help='Timing algorithm; change only with the host stopped')
     parser.add_argument('--list-devices', action='store_true')
     parser.add_argument('--diagnostic', action='store_true', help='Allow PCM only for development; not an Atmos test')
     args = parser.parse_args()

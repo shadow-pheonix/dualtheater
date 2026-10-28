@@ -4,7 +4,8 @@ param(
     [string]$Device = '',
     [string]$LanAddress = '',
     [switch]$ListDevices,
-    [switch]$Diagnostic
+    [switch]$Diagnostic,
+    [ValidateSet('baseline','servo','audio-clock')][string]$SyncMode = 'audio-clock'
 )
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
@@ -37,7 +38,7 @@ if (-not $Device -and -not $Diagnostic) {
     $Device = Read-Host 'HDMI device'
     if (-not $Device.StartsWith('wasapi/')) { throw 'An explicit wasapi/... HDMI endpoint is required.' }
 }
-$launchArgs = @('-m', 'host.server', '--mpv', $MpvPath)
+$launchArgs = @('-m', 'host.server', '--mpv', $MpvPath, '--sync-mode', $SyncMode, '--data-dir', (Join-Path $env:LOCALAPPDATA 'DualTheater-RobustSync'))
 if ($Device) { $launchArgs += @('--device', $Device) }
 if ($LanAddress) { $launchArgs += @('--host', $LanAddress) }
 if ($Diagnostic) { $launchArgs += '--diagnostic' }

@@ -48,3 +48,6 @@ build/
 *.spec
 *.exe
 settings.local.*
+
+calibration-*.json
+calibration-*.tmp

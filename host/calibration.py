@@ -54,6 +54,7 @@ class Run:
     stop: threading.Event = field(default_factory=threading.Event)
     worker: object = None
     preparing_owned: bool = False
+    context: object = None
 
 
 class CalibrationService:
@@ -81,7 +82,8 @@ class CalibrationService:
             peer = self.app.peer
             return {'state': run.state if run else 'idle', 'run_id': run.run_id if run else None,
                     'error': run.error if run else '', 'result': run.result if run else None,
-                    'video_lead_ms': self.app.offset_ms, 'tv_connected': bool(peer and not peer.closed),
+                    'video_lead_ms': self.app.offset_ms, 'sync_mode': self.app.sync_mode,
+                    'tv_connected': bool(peer and not peer.closed),
                     'phone_connected': self.owner is not None, 'fixture_id': FIXTURE_ID,
                     'cue_times_ms': CUE_TIMES_MS, 'source': 'SDR / stereo TrueHD / no Atmos'}
 
@@ -112,7 +114,8 @@ class CalibrationService:
                 and (run.epoch is None or self.app.epoch == run.epoch))
 
     def _same_playback(self, run):
-        return self._owns_playback(run) and self.app.offset_ms == run.base_lead
+        return (self._owns_playback(run) and self.app.offset_ms == run.base_lead
+                and (run.context is None or run.context == self.app.profile_context()))
 
     def _measure(self, run):
         try:
@@ -131,6 +134,7 @@ class CalibrationService:
                     return
                 self.app.action({'action': 'play'})
                 run.epoch = self.app.epoch
+                run.context = self.app.profile_context()
                 run.preparing_owned = False
                 with self.lock:
                     if not run.stop.is_set():
@@ -184,7 +188,7 @@ class CalibrationService:
                 run = self._owned(owner, run_id)
                 if run.state != 'measured' or not self._same_playback(run) or self.app.state != 'paused':
                     raise ValueError('Playback or offset changed; start a new calibration test')
-                self.app.action({'action': 'offset', 'milliseconds': run.result['proposed_video_lead_ms']})
+                self.app.action({'action': 'offset', 'milliseconds': run.result['proposed_video_lead_ms'], 'source': 'phone'})
                 run.state = 'applied'
         finally:
             self.app.op_lock.release()

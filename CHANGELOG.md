@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0-beta.1 — unreleased Robust Sync comparison
+
+- Separate main-based branch and isolated desktop/TV identity; original timing, improved video-servo and remote-audio-clock modes with independent zero-default offset files.
+- Source-timestamped mpv samples, bounded affine clock/timeline estimation and a separate authenticated timing stream on the existing control port.
+- Stock Media3 video renderer with a remote audio MediaClock, lifecycle/offset handling, startup progress verification and confidence/watchdog pauses. Audio stays at 1x with original TrueHD packets.
+- Optional codec-rendered feedback with bounded PTS/epoch correlation; scheduled release is kept distinct from physical presentation.
+- Read-only LG S95TR settings and Windows HDMI latency inspection. Added AV delay and unknown total processing latency remain distinct; no guessed correction is applied.
+- Mode/provenance/context diagnostics, profile-change indication, and phone client `0.1.1-beta.1` showing the active algorithm. Measurement precedes explicit Apply.
+- New source desktop launcher and comparison guide. Software testing does not establish improved physical lip-sync; Windows/TV/S95TR acceptance is still pending.
+
 ## 0.5.0-beta.2 — unreleased phone calibration v1
 
 - Separate Android phone calibration preview `0.1.0-beta.1`, LAN discovery/pairing and foreground Camera2/AudioRecord capture without a separate physical reference fixture.

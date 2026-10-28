@@ -60,6 +60,26 @@ class RealMpvTests(unittest.TestCase):
         self.assertIsNone(self.audio.get('audio-out-params'))
         with self.assertRaises(RuntimeError): self.audio.verify()
 
+    def test_source_timestamp_script_reports_fresh_advancing_audio(self):
+        self.audio = Mpv(os.environ['DUALTHEATER_MPV'], None, Path(self.tmp.name), diagnostic=True)
+        with patch('host.mpv.subprocess.Popen', side_effect=self.null_output): self.audio.launch()
+        self.audio.command('loadfile', str(self.wav), 'replace')
+        self.wait(lambda: self.audio.get('audio-out-params'))
+        self.audio.pause(False)
+        samples = []
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and len(samples) < 6:
+            sample = self.audio.timed_audio_sample()
+            if sample['position_ms'] is not None:
+                samples.append(sample)
+            time.sleep(.05)
+        self.assertEqual(len(samples), 6)
+        self.assertGreater(samples[-1]['position_ms'], samples[0]['position_ms'])
+        for sample in samples:
+            self.assertEqual(sample['source'], 'mpv_source_clock')
+            self.assertLess(abs(time.perf_counter_ns() - sample['host_ns']), 3_000_000_000)
+            self.assertGreaterEqual(sample['uncertainty_ms'], 0)
+
     def test_truehd_packet_path_and_seek_with_null_output(self):
         clip = Path(__file__).resolve().parents[1] / 'calibration-SDR-TrueHD-no-Atmos.mkv'
         if not clip.exists(): self.skipTest('Generate calibration clip first')

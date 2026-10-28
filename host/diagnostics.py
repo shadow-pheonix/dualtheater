@@ -29,6 +29,30 @@ def vocabulary(value, allowed):
     return value if isinstance(value, str) and value in allowed else 'unknown'
 
 
+def receiver_report(observations):
+    """Re-allowlist at the export boundary, even for internal probe results."""
+    result = {}
+    lg = observations.get('inspect_s95tr')
+    if isinstance(lg, dict):
+        result['lg_s95tr'] = {
+            'model': vocabulary(lg.get('model'), ('S95TR', 'unconfirmed')),
+            'added_av_delay_ms': number(lg.get('added_av_delay_ms'), 0, 300),
+            'input_id': number(lg.get('input_id'), 0, 255),
+            'mode_id': number(lg.get('mode_id'), 0, 255),
+            'total_processing_delay_ms': None,
+            'automatic_correction_applied': False,
+        }
+    hdmi = observations.get('inspect_hdmi')
+    if isinstance(hdmi, list):
+        result['hdmi_declarations'] = [
+            {key: number(row.get(key), 0, 500) for key in (
+                'audio_latency_ms', 'video_latency_ms', 'interlaced_audio_latency_ms',
+                'interlaced_video_latency_ms')}
+            for row in hdmi[:8] if isinstance(row, dict)]
+        result['hdmi_route_verified'] = False
+    return result
+
+
 def save_report(path, report):
     """Atomically save a report already built by SessionDiagnostics.report."""
     payload = json.dumps(report, indent=2, ensure_ascii=True, allow_nan=False) + '\n'

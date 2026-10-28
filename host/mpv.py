@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 import uuid
+from .timing import AffineClock
 
 
 class OverlappedPipe:
@@ -66,6 +67,9 @@ class Mpv:
         self.ids = itertools.count(1)
         self.events = queue.Queue()
         self.restarts = 0
+        self.sample_waiters = {}
+        self.sample_lock = threading.Lock()
+        self.sample_clock = AffineClock()
 
     def launch(self):
         if os.name != 'nt':
@@ -80,6 +84,7 @@ class Mpv:
                 '--ordered-chapters=no', '--access-references=no',
                 '--input-default-bindings=no', '--input-vo-keyboard=no',
                 '--script=' + str(Path(__file__).with_name('select_audio.lua')),
+                '--script=' + str(Path(__file__).with_name('audio_timing.lua')),
                 '--input-ipc-server=' + pipe,
                 '--log-file=' + str(self.log_dir / 'mpv.log')]
         if self.device:
@@ -119,6 +124,14 @@ class Mpv:
                     raw, _, rest = buffer.partition(b'\n')
                     buffer = bytearray(rest)
                     msg = json.loads(raw)
+                    if msg.get('event') == 'client-message':
+                        args = msg.get('args', [])
+                        if len(args) == 5 and args[0] == 'dualtheater-audio-sample':
+                            with self.lock:
+                                sample_waiter = self.sample_waiters.get(args[1])
+                            if sample_waiter:
+                                sample_waiter.put((args, time.perf_counter_ns()))
+                        continue
                     with self.lock:
                         waiter = self.pending.get(msg.get('request_id'))
                     if waiter:
@@ -183,6 +196,33 @@ class Mpv:
         t1 = time.perf_counter_ns()
         return {'position_ms': None if position is None else position * 1000,
                 'host_ns': (t0 + t1) // 2, 'uncertainty_ms': (t1 - t0) / 2e6}
+
+    def timed_audio_sample(self):
+        """Bracket the property read in mpv; correlate its arbitrary clock origin."""
+        with self.sample_lock:
+            request = uuid.uuid4().hex
+            waiter = queue.Queue(maxsize=2)
+            with self.lock:
+                self.sample_waiters[request] = waiter
+            t0 = time.perf_counter_ns()
+            try:
+                self.command('script-message-to', 'audio_timing', 'dualtheater-sample', request, timeout=.5)
+                args, t3 = waiter.get(timeout=.5)
+                before, after = (round(float(v) * 1e9) for v in args[2:4])
+                self.sample_clock.add(t0, before, after, t3)
+                clock = self.sample_clock.best(t3)
+                pts = None if args[4] == 'unavailable' else float(args[4]) * 1000
+                if clock is None:
+                    return {'position_ms': None, 'host_ns': t3, 'uncertainty_ms': 1000,
+                            'source': 'mpv_source_clock'}
+                return {'position_ms': pts, 'host_ns': clock.host((before + after) // 2),
+                        'uncertainty_ms': (clock.uncertainty_ns + (after - before) / 2) / 1e6,
+                        'source': 'mpv_source_clock'}
+            except queue.Empty as e:
+                raise TimeoutError('mpv source-timestamp sampler did not answer') from e
+            finally:
+                with self.lock:
+                    self.sample_waiters.pop(request, None)
 
     def verify(self):
         params = self.get('audio-out-params', {}) or {}

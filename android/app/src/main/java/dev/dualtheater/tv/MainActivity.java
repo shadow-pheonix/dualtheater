@@ -43,6 +43,12 @@ public final class MainActivity extends Activity {
     private TextView info;
     private EditText hostInput, portInput, tokenInput;
     private ControlClient client;
+    private TimingClient timingClient;
+    private final RemoteTimeline audioTimeline = new RemoteTimeline();
+    private final FrameObservations observations = new FrameObservations();
+    private final java.util.concurrent.atomic.AtomicLong frameSequence = new java.util.concurrent.atomic.AtomicLong();
+    private AudioClockRenderer audioClockRenderer;
+    private String syncMode = "baseline";
     private boolean connected = false, seekPending = false, loading = false;
     private final PlaybackSession playback = new PlaybackSession();
     private volatile long callbackGeneration = 0;
@@ -365,7 +371,11 @@ public final class MainActivity extends Activity {
     }
 
     private void createPlayer() {
-        DefaultRenderersFactory defaults = new DefaultRenderersFactory(this)
+        DefaultRenderersFactory defaults = new DefaultRenderersFactory(this) {
+            @Override protected androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory getCodecAdapterFactory() {
+                return new ObservingCodecFactory(super.getCodecAdapterFactory(), observations);
+            }
+        }
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector((mime, secure, tunnel) -> {
                 List<androidx.media3.exoplayer.mediacodec.MediaCodecInfo> hardware = new ArrayList<>();
@@ -378,7 +388,10 @@ public final class MainActivity extends Activity {
         RenderersFactory videoOnly = (handler, video, audio, text, metadata) -> {
             List<Renderer> out = new ArrayList<>();
             for (Renderer r : defaults.createRenderers(handler, video, audio, text, metadata)) {
-                if (r.getTrackType() == C.TRACK_TYPE_VIDEO) out.add(r);
+                if (r.getTrackType() == C.TRACK_TYPE_VIDEO) {
+                    audioClockRenderer = new AudioClockRenderer(r, audioTimeline);
+                    out.add(audioClockRenderer);
+                }
             }
             return out.toArray(new Renderer[0]);
         };
@@ -449,10 +462,14 @@ public final class MainActivity extends Activity {
         final long sessionGeneration = playback.generation();
         final long generation = ++callbackGeneration;
         frame = new JSONObject();
+        observations.clear();
         player.setVideoFrameMetadataListener((pts, release, format, mediaFormat) -> {
             if (!playback.matches(sessionGeneration) || generation != callbackGeneration) return;
             try {
+                long sequence = frameSequence.incrementAndGet();
+                observations.schedule(listenerEpoch, sequence, pts, release);
                 frame = new JSONObject().put("epoch", listenerEpoch).put("position_ms", pts / 1000.0)
+                    .put("sequence", sequence).put("kind", "scheduled_release")
                     .put("release_ns", release).put("valid", release != C.TIME_UNSET && release > 0)
                     .put("mime", format.sampleMimeType).put("codecs", format.codecs)
                     .put("width", format.width).put("height", format.height)
@@ -463,6 +480,7 @@ public final class MainActivity extends Activity {
 
     private void connect() {
         if (connecting) return;
+        if (timingClient != null) timingClient.close();
         cancelStart(); player.pause(); ++seekSerial;
         resetRemote(); remoteSupported = false; coordinatorEpoch = -1;
         if (client != null) client.close();
@@ -485,6 +503,7 @@ public final class MainActivity extends Activity {
                 main.post(() -> {
                     if (destroyed || client != session[0]) return;
                     connected = false; connecting = false; cancelStart(); resetRemote(); player.pause();
+                    if (timingClient != null) timingClient.close();
                     if (authRequired) { authRequired = false; return; }
                     info.setText(reason + "\nReconnect, then reload the media on Windows.");
                     setup.setVisibility(View.VISIBLE);
@@ -520,6 +539,20 @@ public final class MainActivity extends Activity {
                 cancelStart(); ++seekSerial; resetRemote();
                 player.stop(); player.clearMediaItems(); player.setPlaybackSpeed(1f);
                 playback.reset(); installFrameListener();
+                syncMode = msg.optString("sync_mode", "baseline");
+                if (!syncMode.equals("baseline") && !syncMode.equals("servo") && !syncMode.equals("audio-clock"))
+                    throw new IllegalArgumentException("Unsupported sync mode");
+                player.createMessage(audioClockRenderer).setType(10001)
+                    .setPayload(syncMode.equals("audio-clock")).send();
+                audioTimeline.reset(0, 0, System.nanoTime());
+                if (timingClient != null) timingClient.close();
+                if (!syncMode.equals("baseline")) {
+                    final TimingClient timing = new TimingClient(); timingClient = timing;
+                    timing.connect(hostInput.getText().toString().trim(), Integer.parseInt(portInput.getText().toString()),
+                        msg.getString("timing_token"), audioTimeline, () -> main.post(() -> {
+                            if (timingClient == timing && connected) { error = "Timing connection lost; reconnect and reload"; status(); }
+                        }));
+                }
                 loading = false; seekPending = false; error = ""; decoderName = "";
                 coordinatorEpoch = -1; coordinatorState = "idle"; movieTitle = ""; movieDurationMs = 0;
                 droppedVideoFrames = 0; transferMbps = -1; transferSampleNs = 0;
@@ -547,7 +580,10 @@ public final class MainActivity extends Activity {
             long incomingEpoch = msg.optLong("epoch", playback.epoch());
             boolean epochChanged = playback.accept(incomingEpoch);
             if (!op.equals("speed")) { cancelStart(); player.pause(); player.setPlaybackSpeed(1f); }
-            if (epochChanged) installFrameListener();
+            if (epochChanged) {
+                audioTimeline.reset(incomingEpoch, Math.round(player.getCurrentPosition() * 1000), System.nanoTime());
+                installFrameListener();
+            }
             switch (op) {
                 case "pause": break;
                 case "load": {
@@ -572,7 +608,11 @@ public final class MainActivity extends Activity {
                 case "arm": {
                     if (seekPending || loading || player.getPlaybackState() != Player.STATE_READY)
                         throw new IllegalStateException("Video not ready");
-                    long target = msg.getLong("host_ns") + msg.getLong("offset_ns");
+                    long target = syncMode.equals("baseline") ? msg.getLong("host_ns") + msg.getLong("offset_ns")
+                        : msg.getLong("video_ns");
+                    if (syncMode.equals("audio-clock")) audioTimeline.arm(playback.epoch(),
+                        Math.round(msg.getDouble("position_ms") * 1000), msg.getLong("audio_ns"), target,
+                        Math.round(msg.getDouble("video_lead_ms") * 1000), System.nanoTime());
                     long delta = target - System.nanoTime();
                     if (delta < 100_000_000L || delta > 10_000_000_000L)
                         throw new IllegalStateException("Start deadline invalid or late");
@@ -593,6 +633,7 @@ public final class MainActivity extends Activity {
                     break;
                 }
                 case "speed": {
+                    if (syncMode.equals("audio-clock")) throw new IllegalArgumentException("Audio-clock mode owns video timing");
                     double value = msg.getDouble("value");
                     if (!Double.isFinite(value) || value < .995 || value > 1.005)
                         throw new IllegalArgumentException("Video speed outside servo bounds");
@@ -654,7 +695,19 @@ public final class MainActivity extends Activity {
                 .put("transfer_mbps", transferMbps >= 0 ? transferMbps : JSONObject.NULL)
                 .put("transfer_age_ms", transferSampleNs > 0 ? (System.nanoTime() - transferSampleNs) / 1000000.0 : JSONObject.NULL)
                 .put("display_hdr_types", new JSONArray(hdrTypes))
-                .put("decoders", capabilities).put("sample_ns", System.nanoTime());
+                .put("decoders", capabilities).put("sample_ns", System.nanoTime())
+                .put("sync_mode", syncMode).put("display_refresh_hz", getWindowManager().getDefaultDisplay().getRefreshRate());
+            long now = System.nanoTime();
+            if (syncMode.equals("audio-clock")) s.put("remote_clock", new JSONObject()
+                .put("state", audioTimeline.state(now)).put("phase_error_ms", audioTimeline.phaseMs())
+                .put("uncertainty_ms", audioTimeline.uncertaintyMs(now))
+                .put("reads_recent", audioClockRenderer.recentlyRead(now))
+                .put("renderer_error_ms", audioClockRenderer.rendererErrorMs()));
+            FrameObservations.Sample rendered = observations.latest();
+            if (rendered != null && rendered.epoch == playback.epoch()) s.put("rendered_frame", new JSONObject()
+                .put("epoch", rendered.epoch).put("sequence", rendered.sequence)
+                .put("position_ms", rendered.mediaUs / 1000.0).put("release_ns", rendered.releaseNs)
+                .put("rendered_ns", rendered.renderedNs).put("received_ns", rendered.receivedNs));
             client.send(s);
         } catch (JSONException ignored) {}
     }
@@ -696,6 +749,7 @@ public final class MainActivity extends Activity {
         if (codeDialog != null) codeDialog.dismiss();
         super.onStop(); cancelStart(); resetRemote(); player.pause();
         if (client != null) client.close(); connected = false;
+        if (timingClient != null) timingClient.close();
         setup.setVisibility(View.VISIBLE); info.setText("Playback stopped. Reconnect and reload to continue.");
     }
 
@@ -711,6 +765,7 @@ public final class MainActivity extends Activity {
         destroyed = true; main.removeCallbacksAndMessages(null);
         stopDiscovery();
         if (client != null) client.close();
+        if (timingClient != null) timingClient.close();
         player.release(); super.onDestroy();
     }
 }

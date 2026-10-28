@@ -1,6 +1,6 @@
 # Advanced source/command-line guide
 
-The downloads and published-build instructions below describe `0.4.1-beta.1`. Current feature-branch source `0.5.0-beta.2` additionally supports the separate [phone calibration client](phone-calibration.md), using the same host launch commands. Use a fresh source folder or `--data-dir` for its private state; keep the public/base build intact.
+The downloads and published-build instructions below describe `0.4.1-beta.1`. Current Robust Sync source `0.6.0-beta.1` supports selectable timing modes and the separate [phone calibration client](phone-calibration.md), with its matching TV app. Source launch defaults to `audio-clock` and the isolated RobustSync app-data directory; use `-SyncMode baseline` or `-SyncMode servo` with `Start.ps1` for comparisons. `Start-Desktop.cmd` opens the native source UI. Follow the [branch-specific guide](robust-sync.md); keep the public/base build intact.
 
 The portable Windows EXE is the recommended interface; see the [main README](../README.md#how-to-use). This optional guide is for running the Python source host. The source ZIP still requires Python and mpv. Do not run it alongside the desktop EXE because both use the same default service ports. ADB is only an optional TV installation method.
 

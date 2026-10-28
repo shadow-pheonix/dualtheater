@@ -60,7 +60,7 @@ class Phone:
 class CalibrationProtocolTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
-        self.runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', self.directory.name, ephemeral=True),
+        self.runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', self.directory.name, ephemeral=True, sync_mode='baseline'),
                                    mpv_factory=test_core.FakeMpv)
         self.runtime.start()
         self.app = self.runtime.app

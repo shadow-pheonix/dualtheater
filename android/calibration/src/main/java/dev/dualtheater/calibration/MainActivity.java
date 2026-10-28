@@ -168,7 +168,8 @@ public final class MainActivity extends Activity {
             if (state != null) {
                 if (!state.optString("fixture_id").equals("phone-v1")) throw new IllegalStateException("Calibration fixture version mismatch");
                 remoteState = state.optString("state", "idle"); runId = state.optString("run_id", "");
-                status.setText("Connected · " + remoteState + (state.optBoolean("tv_connected") ? " · TV connected" : " · Connect the TV first"));
+                status.setText("Connected · " + state.optString("sync_mode", "legacy") + " · " + remoteState
+                    + (state.optBoolean("tv_connected") ? " · TV connected" : " · Connect the TV first"));
                 if (!state.optString("error").isEmpty()) problem.setText(state.optString("error"));
                 if (!warming && !starting && Arrays.asList("error", "cancelled", "measured", "applied").contains(remoteState)) stopCapture();
                 JSONObject measured = state.optJSONObject("result");

@@ -1,11 +1,11 @@
-# DualTheater Calibration Preview — first phone client
+# DualTheater Calibration Preview — phone client
 
-Unreleased phone version `0.1.0-beta.1` requires Windows/TV preview `0.5.0-beta.2`. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
+Unreleased phone version `0.1.1-beta.1` accompanies Windows/TV Robust Sync `0.6.0-beta.1` and remains compatible with the earlier preview protocol. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
 
 ## Install and connect
 
-1. Run the matching Windows preview and connect **DualTheater TV Preview** normally. Preserve the base apps; published `0.4.1-beta.1` does not support this phone client. Run only one Windows host at a time.
-2. Sideload the phone APK, `calibration-debug.apk` from the module build output or `DualTheater-Calibration-v0.1.0-beta.1-debug.apk` when packaged. Open **DualTheater Calibration Preview**. Android 8 or newer is required. Its package, `dev.dualtheater.calibration.preview`, is separate from the TV/base apps.
+1. Run the matching Windows Robust Sync host and connect **DualTheater TV Robust Sync** normally. Preserve the base apps; published `0.4.1-beta.1` does not support this phone client. Run only one Windows host at a time.
+2. Sideload the phone APK, `calibration-debug.apk` from the module build output or `DualTheater-Calibration-v0.1.1-beta.1-debug.apk` when packaged. Open **DualTheater Calibration Preview**. Android 8 or newer is required. Its package, `dev.dualtheater.calibration.preview`, is separate from the TV/base apps.
 3. Put the phone, TV and computer on the same trusted LAN. On the phone, press **Find computers**, select the computer, enter the six-digit code shown on Windows **Connect** (or its source-host terminal/browser) and press **Connect**.
 4. Later connections reuse a private per-phone credential; leave the code empty for saved pairing. If discovery is blocked, enter the LAN address and control port manually. Default control TCP 8766 and discovery UDP 8767 are shared with the TV; no additional port is required. The phone has a separate calibration role and does not occupy the TV socket.
 
@@ -13,13 +13,15 @@ Connections retain the project's cleartext, trusted-LAN model. Do not expose the
 
 ## Run and apply
 
+For a build comparison, select the desired mode on Windows **Connect** while disconnected, reconnect/reload and start at zero Video lead. The phone status identifies the mode. Complete a test without Apply to measure first; each mode saves its own correction only after Apply. See the [comparison procedure](robust-sync.md). The unchanged published main host does not support this protocol; use the new branch's baseline mode for the same-clip numerical comparison.
+
 1. Position the phone steadily at the listening seat, in landscape, with the TV centered in the camera guide. Keep the room quiet and use the built-in microphone; Bluetooth, USB and headset input are unsupported in v1.
 2. Press **Start calibration / verify again** and grant camera/microphone permissions. This replaces the current movie with the reference clip; reload the movie afterward.
 3. The phone stabilizes exposure and capture clocks before asking Windows to play the reference through the existing coordinated TV/HDMI path. Keep still until six flash/beep pairs are detected. The 22-second reference uses irregular intervals and 1 kHz/40 ms beeps, avoiding silent whole-period pairing errors.
 4. Capture stops and numerical measurements go to Windows. Both players pause. Review sound-early/sound-late timing, repeat spread, capture-resolution estimate and suggested **Video lead**.
 5. Press **Apply suggested Video lead** to save it on Windows. Nothing is applied automatically. The test stays paused; the next coordinated start uses the new setting. Run another test to verify, or reload the movie on Windows.
 
-**Cancel test**, app backgrounding, capture failure or phone disconnection cancels the test. Windows pauses it when it still owns that playback. A transport/TV/offset change invalidates old results. Stale run IDs and repeated Apply are rejected. Offset saves are atomic and preserve the previous value if replacement fails.
+**Cancel test**, app backgrounding, capture failure or phone disconnection cancels the test. Windows pauses it when it still owns that playback. A transport/TV/offset or observed media/receiver-context change invalidates old results. Stale run IDs and repeated Apply are rejected. Offset saves are atomic and preserve the previous value if replacement fails.
 
 The reference is original SDR H.264 with stereo TrueHD and **no Atmos**. It exercises the normal compressed-audio path but does not prove HDR/Atmos reception or identical latency for every movie. Keep TV/receiver modes consistent and check the actual movie afterward.
 

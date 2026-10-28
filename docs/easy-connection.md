@@ -17,3 +17,5 @@ The host stores its stable identity and remembered per-TV tokens in `pairings.js
 After a lost connection, reconnect the TV and reload the movie before resuming. The desktop disables transport until reloading succeeds. Disconnecting from Connect stops the host/audio path so audio settings can be changed safely; start, reconnect and reload afterward.
 
 Incorrect short-code attempts are limited. A corrupt pairing file is reported rather than silently overwritten. Authentication and streaming retain the beta's cleartext trusted-LAN design; they are not Internet-safe services.
+
+For the unreleased Robust Sync build, use **DualTheater TV Robust Sync** with its matching host. It has separate pairing/settings from both base and preview apps. See [installation and mode comparison](robust-sync.md).
