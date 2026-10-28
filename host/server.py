@@ -24,6 +24,7 @@ from .mpv import Mpv
 from .sync import ClockFilter, VideoServo, parse_range
 from .pairing import PairingStore
 from .discovery import DiscoveryServer, DISCOVERY_PORT
+from .diagnostics import SessionDiagnostics
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -47,6 +48,7 @@ class Peer:
         self.counter = 0
         self.clock = ClockFilter()
         self.status = {}
+        self.status_seen = None
         self.seen = ns()
         self.closed = False
         self.last_remote_id = 0
@@ -120,6 +122,7 @@ class Coordinator:
         self.speed = 1.0
         self.last_correction = 0
         self.servo = VideoServo()
+        self.diagnostics = SessionDiagnostics()
         self.recoveries = deque()
         self.op_lock = threading.RLock()
         self.stop = threading.Event()
@@ -154,7 +157,17 @@ class Coordinator:
                 'logs': list(self.logs), 'host': self.args.host, 'control_port': self.args.control_port,
                 'pair_token': self.pair_token, 'diagnostic': self.args.diagnostic,
                 'pair_code': self.pair_code, 'host_name': self.host_name,
+                'diagnostics': self.diagnostic_report(),
                 'audio_tracks': self.mpv.get('track-list', []) if self.mpv and self.state not in ('loading', 'seeking') else []}
+
+    def diagnostic_report(self):
+        # This path performs no mpv IPC and never copies a raw snapshot/log.
+        p = self.peer
+        status_seen = p.status_seen if p else None
+        return self.diagnostics.report(
+            state=self.state, connected=bool(p and not p.closed), status=p.status if p else {},
+            status_age_ms=(ns() - status_seen) / 1e6 if status_seen is not None else None,
+            epoch=self.epoch, audio=self.audio_info, video_lead_ms=self.offset_ms)
 
     def tv(self):
         if not self.peer or self.peer.closed:
@@ -176,6 +189,7 @@ class Coordinator:
         self.servo.reset()
 
     def fail(self, message):
+        self.diagnostics.error()
         self.error = str(message)
         self.cancel.set()
         try:
@@ -299,6 +313,8 @@ class Coordinator:
         if action == 'pause':
             self.cancel.set()  # interrupts a pending start/prepare before taking the operation lock
         with self.op_lock:
+            operation_started = ns()
+            failed = False
             try:
                 if action == 'pause':
                     self.pause_both()
@@ -346,8 +362,11 @@ class Coordinator:
                 else:
                     raise ValueError('Unknown action')
             except Exception as e:
+                failed = True
                 self.fail(str(e))
                 raise
+            finally:
+                self.diagnostics.operation(action, (ns() - operation_started) / 1e6, failed)
 
     def heartbeat(self):
         while not self.stop.wait(.5):
@@ -437,7 +456,7 @@ class Coordinator:
                 p = self.tv()
                 s = p.status
                 if s.get('epoch') != self.epoch:
-                    continue
+                    raise RuntimeError('TV playback generation changed; reconnect and reload the movie')
                 if s.get('error'):
                     raise RuntimeError(s['error'])
                 if s.get('state') == 'ended' or self.mpv.get('eof-reached', False):
@@ -446,7 +465,7 @@ class Coordinator:
                     continue
                 if s.get('state') == 'buffering' or self.mpv.get('paused-for-cache', False):
                     position = self.mpv.get('time-pos', 0) * 1000
-                    self.recover(position, 'Buffer underrun')
+                    self.recover(position, 'Buffer underrun', 'buffering')
                     continue
                 if not s.get('playing', False):
                     raise RuntimeError('TV stopped unexpectedly; playback paused')
@@ -479,12 +498,13 @@ class Coordinator:
                 video_ms = frame['position_ms'] + (sample['host_ns'] - release_host) / 1e6 * s.get('speed', 1)
                 self.drift_ms = video_ms - (sample['position_ms'] + self.offset_ms)
                 speed, hard = self.servo.update(self.drift_ms)
+                self.diagnostics.timing(self.drift_ms, clock.rtt_ns / 1e6, sample['uncertainty_ms'])
                 self.csv.writerow([sample['host_ns'], self.epoch, sample['position_ms'], video_ms,
                                    self.drift_ms, speed, clock.rtt_ns / 1e6, sample['uncertainty_ms']])
                 self.csv_file.flush()
                 self.last_correction = now
                 if hard:
-                    self.recover(sample['position_ms'], f'Sustained {self.drift_ms:.0f} ms drift')
+                    self.recover(sample['position_ms'], f'Sustained {self.drift_ms:.0f} ms drift', 'drift')
                 elif abs(speed - self.speed) > .0001:
                     p.request('speed', epoch=self.epoch, value=speed)
                     self.speed = speed
@@ -493,17 +513,24 @@ class Coordinator:
             finally:
                 self.op_lock.release()
 
-    def recover(self, position_ms, reason):
+    def recover(self, position_ms, reason, kind='drift'):
         now = ns()
         while self.recoveries and now - self.recoveries[0] > 60_000_000_000:
             self.recoveries.popleft()
         if len(self.recoveries) >= 3:
             raise RuntimeError('Repeated sync/buffer failures; improve network or check timing diagnostics, then resume manually')
         self.recoveries.append(now)
+        self.diagnostics.recovery(kind)
         self.log(reason + ': coordinated pause, prepare and restart')
         self.cancel.clear()
-        self.prepare(position_ms)
-        self.start(prepared=True)
+        started = ns()
+        failed = True
+        try:
+            self.prepare(position_ms)
+            self.start(prepared=True)
+            failed = False
+        finally:
+            self.diagnostics.operation('recovery', (ns() - started) / 1e6, failed)
 
     def close(self):
         self.stop.set()
@@ -555,6 +582,7 @@ class ControlHandler(socketserver.StreamRequestHandler):
                     peer.clock.add(int(msg['t0']), int(msg['t1']), int(msg['t2']), t3)
                 elif msg.get('op') == 'status':
                     peer.status = msg
+                    peer.status_seen = t3
                 elif msg.get('op') == 'remote':
                     app.enqueue_remote(peer, msg)
                 elif 'reply' in msg:
@@ -567,6 +595,7 @@ class ControlHandler(socketserver.StreamRequestHandler):
         finally:
             if peer:
                 peer.close()
+                app.diagnostics.disconnected()
                 app.log('TV disconnected')
 
 
@@ -616,6 +645,8 @@ class HttpHandler(BaseHTTPRequestHandler):
                     return self.reply(200, app.snapshot())
                 except Exception as e:
                     return self.reply(503, {'error': str(e)})
+            if path == '/api/diagnostics' and hmac.compare_digest(self.headers.get('X-Control-Token', ''), app.ui_token):
+                return self.reply(200, app.diagnostic_report())
             return self.reply(404, {'error': 'Not found'})
         expected = f'/media/{app.media_token}/'
         if not app.media or not path.startswith(expected) or path.count('/') != 3:

@@ -37,6 +37,7 @@ test-results*.txt
 *-lint.txt
 *-unit-tests.xml
 live-timing.json
+DualTheater-diagnostics*.json
 Thumbs.db
 .DS_Store
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0-beta.1 — unreleased feature branch
+
+- Additional Diagnostics page and local-browser JSON export with an explicit field allowlist that excludes personal media, network, device and pairing data.
+- Bounded drift statistics, operation latency/failure counters, categorized recovery/disconnect counts and TV buffer/transfer/frame-drop telemetry.
+- Playback epochs scoped to TV connections, allowing host restart and rejecting callbacks from earlier playback generations. Reconnect still requires reloading the movie.
+- Separate development version; published 0.4.1 assets and the base branch remain unchanged. Physical-device acceptance is pending.
+- Preview desktop profile and Android application ID are separate from the base apps, preserving their saved setup during development testing.
+
 ## 0.4.1-beta.1 — automatic mpv setup
 
 - Download mpv directly from its official Windows release inside the desktop app; checksum verification, nested ZIP extraction, DLL retention and automatic selection.

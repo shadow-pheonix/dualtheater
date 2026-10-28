@@ -30,7 +30,7 @@ command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onefile','
          '--name','DualTheater','--noupx','--paths',str(root),'--distpath',str(Path(args.dist).resolve()),
          '--workpath',str(work/'pyinstaller'),'--specpath',str(work),
          '--icon',str(root/'assets/dualtheater.ico')]
-version = re.search(r"VERSION = '([^']+)'", (root/'host/desktop_support.py').read_text(encoding='utf-8'))[1]
+version = re.search(r"__version__ = '([^']+)'", (root/'host/__init__.py').read_text(encoding='utf-8'))[1]
 android_version = re.search(r"versionName '([^']+)'", (root/'android/app/build.gradle').read_text(encoding='utf-8'))[1]
 if version != android_version:
     raise SystemExit('Windows and Android beta versions must match.')

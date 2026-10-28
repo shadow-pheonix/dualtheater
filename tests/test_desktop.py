@@ -8,13 +8,30 @@ import time
 import unittest
 from unittest.mock import patch
 
-from host.desktop_support import (DesktopService, Settings, find_mpv, format_time,
+from host.desktop_support import (DesktopService, Settings, default_data_dir, find_mpv, format_time,
                                   list_devices, parse_devices, runtime_args)
 from host.server import HostRuntime
 from test_core import FakeMpv, SimulatedTV
 
 
 class DesktopSettingsTests(unittest.TestCase):
+    def test_preview_settings_do_not_read_or_overwrite_the_base_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)/'DualTheater'
+            base.mkdir()
+            settings_path = base/'settings.local.json'
+            settings_path.write_text('{"mpv":"base-player.exe","device":"wasapi/base"}')
+            original = settings_path.read_bytes()
+            with patch.dict('os.environ', {'LOCALAPPDATA': directory}):
+                preview = default_data_dir()
+                self.assertEqual(preview, Path(directory)/'DualTheater-Preview')
+                settings = Settings(preview)
+                self.assertEqual(settings.values, {})
+                player = Path(directory)/'preview.exe'
+                player.touch()
+                settings.save(str(player), 'wasapi/preview')
+            self.assertEqual(settings_path.read_bytes(), original)
+
     def test_private_state_survives_restart_and_ignores_unknown_fields(self):
         with tempfile.TemporaryDirectory() as directory:
             player = Path(directory)/'mpv.exe'
@@ -139,6 +156,13 @@ class DesktopTransportTests(unittest.TestCase):
                 service.submit('action',action='offset',milliseconds=90)
                 self.wait_event(service,'action_done')
                 self.assertEqual(json.loads((Path(directory)/'calibration.json').read_text())['video_lead_ms'],90)
+                report_path = Path(directory)/'report.json'
+                service.submit('export_diagnostics', path=str(report_path))
+                self.wait_event(service, 'diagnostics_exported')
+                report = json.loads(report_path.read_text())
+                self.assertEqual(report['operations']['load']['count'], 1)
+                self.assertNotIn(movie.name, report_path.read_text())
+                self.assertNotIn(app.pair_code, report_path.read_text())
                 service.submit('stop')
                 self.wait_event(service,'stopped')
                 self.assertIsNone(service.runtime)

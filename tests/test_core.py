@@ -275,6 +275,7 @@ class ProtocolTests(unittest.TestCase):
         self.tv.state = 'buffering'
         self.wait(lambda: self.app.epoch > old_epoch and self.app.state == 'playing')
         self.assertTrue(self.app.recoveries)
+        self.assertEqual(self.app.diagnostic_report()['recoveries']['buffering'], 1)
         self.tv.timing_valid = False
         self.wait(lambda: self.app.state == 'error', seconds=5)
         self.assertTrue(self.app.mpv.paused)

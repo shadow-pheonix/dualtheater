@@ -6,6 +6,8 @@
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
+**Unreleased development branch:** `feature/playback-reliability` builds version `0.5.0-beta.1` with playback diagnostics, sanitized report export and a TV host-restart fix. These features are not in the downloadable `0.4.1-beta.1` builds below. The base build and published assets are preserved. See [branch diagnostics instructions](docs/diagnostics.md).
+
 ## Download
 
 **Current downloadable version: v0.4.1-beta.1 — experimental, still in testing.** The Windows EXE and TV APK are published and verified. Use the matching Windows and TV versions.
@@ -91,6 +93,8 @@ Keep the Windows app open throughout playback. Check the TV's active HDR indicat
 
 ## Operating the player
 
+The instructions in this section describe the published `0.4.1-beta.1` build. When running this development branch, an additional **Diagnostics** page provides playback metrics and **Export sanitized report…**; see the [development feature guide](docs/diagnostics.md). After a TV reconnect, continue to reload the movie before playback.
+
 | Task | In the Windows app |
 | --- | --- |
 | Play or pause | On **Player**, press **Play** or **Pause**. The TV remote's middle/OK button also controls both players. |
@@ -158,6 +162,8 @@ The current target is an ordinary single-timeline MKV. Subtitles, playlists, vid
 ## Build and test
 
 For ongoing development or a new Codex session, start with [project context](docs/context.md) and follow [AGENTS.md](AGENTS.md). Updating the shared context after meaningful changes and before handoffs is mandatory. Whenever a project change makes installation or operating instructions outdated, update the affected README instructions in that same change before publishing.
+
+This feature branch builds a separate `0.5.0-beta.1` candidate. Its **DualTheater Preview** desktop uses `%LOCALAPPDATA%\DualTheater-Preview` for settings, pairing, calibration, logs and managed players, leaving the base desktop's profile intact. **DualTheater TV Preview** uses a separate Android package (`dev.dualtheater.tv.preview`) and can be installed alongside the base TV app without replacing its settings. Keep build outputs separate from the base EXE/APK and use a matching branch-built host/TV app together. Only run one host at a time. The candidate has not been published or physically validated.
 
 To build the Windows EXE from source on Windows with Python 3.11 x64:
 

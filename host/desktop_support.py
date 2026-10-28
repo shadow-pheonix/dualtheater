@@ -12,12 +12,15 @@ import threading
 
 from .server import HostRuntime, lan_address
 from .player_download import managed_player, install_player
+from . import __version__
+from .diagnostics import save_report
 
-VERSION = '0.4.1-beta.1'
+VERSION = __version__
+PROFILE_NAME = 'DualTheater-Preview'
 
 
 def default_data_dir():
-    return Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData/Local') / 'DualTheater'
+    return Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData/Local') / PROFILE_NAME
 
 
 def find_mpv(saved='', executable_dir=None, data_dir=None):
@@ -165,6 +168,11 @@ class DesktopService:
                         raise RuntimeError('Start the TV connection first.')
                     self.runtime.app.action(values)
                     self.events.put(('action_done', values['action']))
+                elif operation == 'export_diagnostics':
+                    if not self.runtime:
+                        raise RuntimeError('Start the TV connection before exporting diagnostics.')
+                    save_report(values['path'], self.runtime.app.diagnostic_report())
+                    self.events.put(('diagnostics_exported', None))
                 elif operation in ('stop', 'close'):
                     runtime, self.runtime = self.runtime, None
                     if runtime:

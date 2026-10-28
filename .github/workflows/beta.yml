@@ -46,7 +46,7 @@ jobs:
           if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Desktop smoke test timed out.' }
           if ($process.ExitCode -ne 0) { throw 'Desktop smoke test failed.' }
           $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
-          if ($report.gui -ne 'passed' -or $report.host_start_stop -ne 'passed' -or $report.external_player -ne 'passed' -or $report.download_select -ne 'passed') { throw 'Desktop smoke test did not pass.' }
+          if ($report.gui -ne 'passed' -or $report.host_start_stop -ne 'passed' -or $report.external_player -ne 'passed' -or $report.download_select -ne 'passed' -or $report.diagnostics -ne 'passed') { throw 'Desktop smoke test did not pass.' }
           Write-Host 'Native GUI, bundled resources, external mpv and local host start/stop passed; physical playback was not tested.'
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:

@@ -18,4 +18,6 @@ assignees: ''
 
 **Physical sync observations**
 
+**Optional sanitized diagnostic report** (development branch only: Diagnostics → Export sanitized report)
+
 Remove personal paths, network addresses, endpoint IDs, pairing data and movie names. Do not attach raw personal logs or film files.
