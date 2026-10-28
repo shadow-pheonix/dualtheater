@@ -1,3 +1,5 @@
+<img src="assets/dualtheater.png" width="72" alt="DualTheater icon" />
+
 # DualTheater
 
 **Experimental beta — still in testing.** This is a working prototype for experimentation, not a finished or broadly validated home-theater player. Physical lip-sync, device compatibility and long-session reliability still need testing.
@@ -6,17 +8,18 @@ DualTheater plays the **video on an Android TV or Google TV** using its native h
 
 ## Download
 
-**Current downloadable version: v0.3.0-beta.1 — experimental prerelease, still in testing.** Download both the TV app and Windows host from this same release.
+**Desktop beta: v0.4.0-beta.1 — experimental, still in testing.** The links below refer to this version; release assets become available after the build-and-release workflow succeeds. Use the matching Windows and TV versions.
 
 | Download | What to do with it |
 | --- | --- |
-| [Android TV / Google TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.3.0-beta.1/DualTheater-TV-v0.3.0-beta.1-debug.apk) | Sideload this installable app onto the TV. |
-| [Windows host + source ZIP](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.3.0-beta.1/DualTheater-v0.3.0-beta.1.zip) | Extract it on your Windows laptop or desktop PC, install Python and mpv separately, then run `Start.cmd`. This is not a standalone Windows EXE or installer. |
-| [SHA-256 checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.3.0-beta.1/SHA256SUMS.txt) | Compare with `Get-FileHash` if you want to verify the downloads. |
+| [Windows x64 portable EXE](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.0-beta.1/DualTheater-Windows-v0.4.0-beta.1-x64.exe) | Download and double-click. No installer, administrator privileges, Python installation or terminal is needed. Select your existing `mpv.exe` once. |
+| [Android TV / Google TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.0-beta.1/DualTheater-TV-v0.4.0-beta.1-debug.apk) | Sideload onto your TV. Includes the matching DualTheater icon and TV launcher banner. |
+| [Source ZIP / optional command-line host](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.0-beta.1/DualTheater-v0.4.0-beta.1.zip) | For source users/developers; requires Python and mpv. Not needed to use the EXE. |
+| [SHA-256 checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.0-beta.1/SHA256SUMS.txt) | Compare with `Get-FileHash` to verify downloaded files. |
 
-[Release notes and all assets](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.3.0-beta.1) · [All releases](https://github.com/shadow-pheonix/dualtheater/releases) · [Installation and operating instructions](#how-to-use)
+[Release notes](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.4.0-beta.1) · [All releases](https://github.com/shadow-pheonix/dualtheater/releases) · [How to use](#how-to-use)
 
-No Android Studio, Java, Gradle or FFmpeg installation is needed to use the downloaded APK and host. Those development tools are only relevant to building or generating test media. Documentation on `main` may be newer than the release ZIP; the commands below target the linked beta.
+The EXE includes Python and its GUI runtime. **mpv is kept separate:** use your known-working Windows mpv build, or obtain one through [mpv's installation page](https://mpv.io/installation/), extract it with its supporting files, then select `mpv.exe` in the app. The EXE is an unsigned development build. Older beta releases and locked local snapshots are preserved.
 
 ## Why this project exists
 
@@ -50,6 +53,7 @@ There is no platform-specific TV brand integration, video re-encode, HDR convers
 
 ## Current features
 
+- Portable native Windows app with saved audio setup, friendly device names, movie picker and transport controls.
 - Original-file HTTP range streaming; the TV receives the original container and uses only a video renderer.
 - Hardware-only Media3 decoding to a SurfaceView, with aspect ratio preservation and a heap-aware sample-buffer budget.
 - TrueHD passthrough using the user's existing mpv installation and an explicit WASAPI HDMI endpoint. Normal mode rejects PCM fallback.
@@ -59,132 +63,69 @@ There is no platform-specific TV brand integration, video re-encode, HDR convers
 
 ## How to use
 
-### 1. Prepare the Windows laptop or desktop PC
+### 1. Download, connect HDMI and install the TV app
 
-Install [Python for Windows](https://www.python.org/downloads/windows/) 3.10 or later and a suitable [Windows mpv build](https://mpv.io/installation/). The host uses only Python's standard library; there is no `pip install` step. The beta was tested with Python 3.11. Extract the mpv distribution and keep its supporting files together. The examples use `C:\Tools\mpv\mpv.exe`; replace that with your own path.
+Use a Windows 10/11 **x64 laptop or desktop PC**. Connect its HDMI output, or a compatible HDMI adapter on a display-capable USB-C port, to your soundbar/receiver's **HDMI IN**. Select that HDMI input. Put the computer and TV on the same trusted home network and keep the computer awake during playback.
 
-Connect the computer's HDMI output, or a compatible HDMI adapter on a display-capable USB-C port, to the soundbar/receiver's **HDMI IN** and select that input. The TV will run its own DualTheater app for video. Put the TV and computer on the same trusted home network. Keep the computer awake during playback.
+Download the Windows EXE and matching APK from [Download](#download). Transfer the APK to the TV and open it using a file manager/package installer. Allow that installer to install apps when the TV asks. Then open **DualTheater TV Beta**. Device menus vary. For optional ADB commands, see the [advanced installation guide](docs/command-line.md#2-install-the-tv-app).
 
-Download the files using the links above, or run this in PowerShell:
+No Android Studio, Java, Gradle, FFmpeg or Python installation is needed for normal use of the EXE and APK. If you already have a source-host terminal open, stop it before opening the EXE.
 
-```powershell
-$downloadDir = Join-Path $env:USERPROFILE 'Downloads\DualTheater'
-New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
-Set-Location -LiteralPath $downloadDir
-$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v0.3.0-beta.1'
-$files = @('DualTheater-v0.3.0-beta.1.zip', 'DualTheater-TV-v0.3.0-beta.1-debug.apk', 'SHA256SUMS.txt')
-foreach ($file in $files) {
-    Invoke-WebRequest -Uri "$releaseUrl/$file" -OutFile $file
-}
-Get-FileHash .\DualTheater-v0.3.0-beta.1.zip, .\DualTheater-TV-v0.3.0-beta.1-debug.apk -Algorithm SHA256
-Get-Content .\SHA256SUMS.txt
-```
+### 2. Connect in the Windows app
 
-Compare each file's hash with its matching line in `SHA256SUMS.txt`. Then extract into a fresh folder and enter the directory containing `Start.cmd`:
+1. Double-click **DualTheater-Windows-v0.4.0-beta.1-x64.exe**. The application stays in one window with **Connect**, **Player**, and **Settings & help** pages.
+2. On **Connect**, click **Browse…** and select your existing `mpv.exe`. If it was found on PATH or beside the EXE, its path is already filled in. Click **Refresh** if necessary.
+3. Under **HDMI audio**, select the soundbar/receiver's friendly Windows name. Speakers and other WASAPI outputs can also appear; selecting one does not guarantee TrueHD capability. There is no long device ID to copy.
+4. Click **Start TV connection**. The app displays the computer name and a six-digit code. Allow the app on your private network if Windows asks.
+5. On the TV, select that computer and enter the code once. Remembered TVs can reconnect automatically. The Windows app switches to **Player** when the TV connects.
 
-```powershell
-Expand-Archive -LiteralPath .\DualTheater-v0.3.0-beta.1.zip -DestinationPath .\extracted
-Set-Location .\extracted\dualtheater
-```
+The mpv path and exact audio endpoint are saved privately. On later launches, the app refreshes available devices and starts the connection if the saved setup is still available. If your HDMI output disappears, reconnect it and refresh; the app does not silently substitute another device.
 
-If you downloaded/extracted manually, open PowerShell in the extracted `dualtheater` folder instead. All host commands below run from that folder. Check that Python is available with `python --version` or `py -3 --version`.
+### 3. Choose a movie and play
 
-### 2. Install the TV app
+On **Player**, click **Choose movie…**, select the original local MKV and click **Load movie**. Wait for both players to prepare, then click **Play**. TrueHD audio is selected automatically. The original file stays on Windows and is streamed directly to the TV; there is no separate upload or conversion step.
 
-Transfer the APK to the TV and open it with a file manager/package installer, allowing that installer to install apps when the TV asks. Open **DualTheater TV Beta** after installation. TV menu names and available transfer methods vary by device.
-
-Alternatively, use [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) and [ADB](https://developer.android.com/tools/adb) from Windows. The commands below assume `adb` is on PATH. If your TV offers wireless debugging with pairing, enable it in Developer options and use its **pairing address** first:
-
-```powershell
-$pairingAddress = Read-Host 'Pairing address shown by the TV (IP:port)'
-adb pair $pairingAddress
-```
-
-Enter the pairing code when ADB asks. Then use the TV's **debugging connection address**, which may have a different port. If your TV uses an already-authorized network ADB connection, start here instead:
-
-```powershell
-$tvAddress = Read-Host 'TV debugging connection address (IP:port)'
-adb connect $tvAddress
-adb devices
-$apkPath = Read-Host 'Full path to the downloaded APK, without surrounding quotes'
-adb -s $tvAddress install -r $apkPath
-```
-
-Accept the debugging prompt on the TV if one appears, and rerun the connection/install command after authorization. Wireless ADB availability depends on the TV and Android version; use a supported sideloading method if it is unavailable. **ADB is only needed for installation/debugging, not normal playback or app pairing.**
-
-Debug APKs are development-signed. If installation reports a different signing certificate, uninstall the previous TV app before installing this APK; that removes its remembered pairing settings. CI debug signing keys are not retained or published.
-
-### 3. Select HDMI audio and start the Windows host
-
-The simplest launch is to double-click `Start.cmd`, or run:
-
-```powershell
-.\Start.cmd
-```
-
-If mpv is not on PATH or in `tools\mpv.exe`, the launcher asks for its executable path. It lists audio devices and asks for the exact `wasapi/...` name of your HDMI soundbar/receiver. Copy the device name without surrounding quotes; do not select laptop speakers or a Bluetooth endpoint.
-
-To list devices separately and supply the choice explicitly:
-
-```powershell
-.\Start.cmd -MpvPath "C:\Tools\mpv\mpv.exe" -ListDevices
-.\Start.cmd -MpvPath "C:\Tools\mpv\mpv.exe" -Device "wasapi/REPLACE_WITH_EXACT_HDMI_DEVICE_ID"
-```
-
-Replace the example path and device ID with your own values. If Python cannot be found, add `-PythonPath "C:\path\to\python.exe"` to the launch command. `Start.cmd` runs the bundled PowerShell launcher without requiring a permanent execution-policy change.
-
-For users who prefer launching Python directly, these are equivalent device-listing and host-start commands; run only one host instance:
-
-```powershell
-python -m host.server --mpv "C:\Tools\mpv\mpv.exe" --list-devices
-python -m host.server --mpv "C:\Tools\mpv\mpv.exe" --device "wasapi/REPLACE_WITH_EXACT_HDMI_DEVICE_ID"
-```
-
-You can substitute `py -3` for `python` if that is your Python launcher. To confirm standalone HDMI passthrough before using DualTheater, stop the host and run this audio-only test with a known TrueHD Atmos source:
-
-```powershell
-& "C:\Tools\mpv\mpv.exe" --vid=no --ao=wasapi --audio-exclusive=yes --audio-spdif=truehd --audio-device="wasapi/REPLACE_WITH_EXACT_HDMI_DEVICE_ID" "D:\Movies\movie.mkv"
-```
-
-Close that test player before starting DualTheater. Independently confirm normal audio and the soundbar/receiver's format indication. The TV app cannot fix a standalone HDMI passthrough failure.
-
-### 4. Pair the TV and load a movie
-
-1. Leave the Windows host running. Open **http://localhost:8764** on that same Windows laptop or desktop PC.
-2. Open the TV app and select your computer's name. Enter the six-digit code shown in the Windows terminal or browser controller. This app pairing is separate from ADB pairing; remembered app credentials are reused on later connections.
-3. In the Windows browser controller's **Prepare the original media** section, paste the full local movie path, for example `D:\Movies\movie.mkv`, **without surrounding quotes**. This is a text field, not a file-upload button; the file stays on the computer.
-4. Leave **Initial audio track** at `auto` to select TrueHD, or enter an mpv audio-track ID when needed. Press **Load** and wait for preparation, then **Play / resume**.
-5. Confirm the TV's active HDR mode and the soundbar/receiver's Atmos indication independently. Software status alone does not prove correct physical output.
-
-Allow Python on the private home network if prompted. Discovery uses UDP 8767, control TCP 8766 and media TCP 8765. The browser controller binds to localhost on TCP 8764; it is not a browser remote for the phone or TV. Guest-network isolation, VPN routing or firewall rules may block discovery. Use the remembered-computer shortcut or **Advanced connection** if needed; see [connection setup](docs/easy-connection.md).
+Keep the Windows app open throughout playback. Check the TV's active HDR indication and the soundbar/receiver's Atmos indication independently. The app's TrueHD message is software evidence, not proof of correct physical HDR/Atmos output.
 
 ## Operating the player
 
-| Task | How to do it |
+| Task | In the Windows app |
 | --- | --- |
-| Play or pause | Press the TV remote's middle/OK button, or **Play / resume** / **Pause** in the Windows browser. |
-| Seek with the TV remote | Press left/right for a 10-second preview; hold for a larger jump and release to commit. A seek while paused stays paused. |
-| Seek to an exact time | Enter seconds in **Seek to seconds** in the Windows browser, then press **Seek**. For example, `600` seeks to 10:00. |
-| Change audio language/track | Select a track under **Audio track** and press **Switch track**. Normal mode requires TrueHD output; other codecs are not a supported fallback in this beta. |
-| Load another movie | Replace the full media path in the browser, press **Load**, wait for preparation, then **Play / resume**. |
-| Recover after a disturbance | If picture/audio are out of step, try **Resynchronize**. If the connection was lost, reconnect the TV, reload the media and then resume. |
-| Stop the session | Pause playback, then press **Ctrl+C** in the Windows host terminal. Closing just the browser page does not stop the host. |
+| Play or pause | On **Player**, press **Play** or **Pause**. The TV remote's middle/OK button also controls both players. |
+| Seek | Drag and release the timeline, use **−10 seconds** / **+10 seconds**, or enter seconds next to **Seek to (seconds)** and press **Seek**. `600` means 10:00. Seeking while paused stays paused. |
+| Change audio language/track | Choose under **Audio track**, then press **Switch track**. Normal playback requires a TrueHD track; other audio formats are not a supported fallback. |
+| Play another movie | Choose it with **Choose movie…**, click **Load movie**, wait, then **Play**. |
+| Adjust physical lip-sync | In **Settings & help**, change **Video lead (ms)** and press **Save and resynchronize**. Increase it if sound arrives early; decrease it if sound arrives late. |
+| Recover a timing disturbance | On **Player**, click **Resynchronize**. It preserves the paused/playing state while coordinating both players again. |
+| Recover a lost TV connection | Reconnect on the TV, then **Load movie** again. Playback controls stay disabled until reloading succeeds. Resume after preparation. |
+| Change mpv or HDMI output | On **Connect**, click **Disconnect** to stop playback first, change the setup, then **Start TV connection**. Reconnect the TV and reload the movie. |
+| Stop playback and exit | Close the Windows app. It stops its host/audio process and closes the TV connection. Closing the optional browser controller does not exit the app. |
 
-The original MKV remains on Windows throughout playback. Keep the host running and the selected HDMI audio device connected. Brief receiver relock can occur after a pause or seek.
+All transport controls use the existing shared Windows/TV synchronization barrier. Audio speed stays at 1.0x; small drift corrections affect video only. Receiver relock can briefly interrupt sound after a seek or pause/resume.
 
-### Adjust physical lip-sync
+### Settings, calibration and updates
 
-Use **Calibrate physical latency** in the Windows browser controller while watching a clear sound/picture event. Increase **Video lead** if sound arrives before the picture; decrease it if sound arrives late. Use the 10 ms buttons or enter a value, press **Save**, then **Resynchronize** to apply a large adjustment immediately. The offset is saved across launches. These controls do not re-encode or change the speed of the TrueHD audio.
+Desktop settings, remembered TV credentials, calibration and logs are stored under **`%LOCALAPPDATA%\DualTheater`**, not inside the EXE or its temporary extraction folder. Use **Settings & help → Open local settings folder** to find them. Preserve these files privately when updating; do not publish them. Moving/replacing the EXE does not reset them. The older source launcher uses its own source-folder state, so the first switch to the EXE may require pairing and calibrating again; the old files are left intact.
 
-You can load the included `calibration-SDR-TrueHD-no-Atmos.mkv` using its full extracted path for a flash/beep test. It is **SDR with stereo TrueHD, not an HDR/Atmos sample**; confirm the result again with the actual movie and processing modes. Automatic camera/microphone calibration and a dedicated TV calibration screen are not implemented in this beta. Physical sync after start, seek and pause/resume still needs hardware validation.
+The optional source ZIP includes `calibration-SDR-TrueHD-no-Atmos.mkv`, an original flash/beep clip. Extract the ZIP and choose that file in **Player** for a basic timing check. It is **SDR with stereo TrueHD, not HDR/Atmos**. Verify the offset again with your movie and processing modes. A dedicated TV calibration screen and automatic camera/microphone calibration are not implemented.
 
-### Common setup problems
+The APK is development-signed. If Android reports a signing-certificate mismatch, uninstall the previous TV app before installing the new APK and pair again. CI debug signing keys are not retained or published. Use a matching host/APK release; do not run multiple hosts against the default ports.
 
-- **No Windows EXE:** use the ZIP with Python and mpv, then `Start.cmd`; there is no standalone Windows installer yet.
-- **No computers appear on the TV:** check that the host is running, both devices share a trusted LAN, and discovery is not blocked. Try the remembered connection or advanced fields.
-- **No sound, noise or rejected audio:** verify the selected HDMI endpoint/input and cable, close competing exclusive-audio apps and test standalone mpv. Choose an actual TrueHD track; do not use PCM diagnostic mode as evidence of Atmos.
-- **Buffering or repeated resynchronization:** check network throughput and the host's error/status messages. A 100 Mbps TV Ethernet port may be slower than remux peaks. See the [hardware test guide](docs/hardware-test.md).
-- **Installing a later beta:** use a matching host/APK pair, preserve the Windows `pairings.json` and `calibration.json` locally, and follow that release's instructions. A TV signing-certificate change may require uninstall/re-pairing.
+### Troubleshooting and optional commands
+
+- **No HDMI sound or noise:** confirm the selected output, receiver input and cable. Close any competing exclusive-audio player. Test your mpv/HDMI setup independently; the TV companion cannot fix a standalone passthrough failure. See [command-line audio test](docs/command-line.md#3-select-hdmi-audio-and-start-the-windows-host).
+- **TV cannot find the computer:** keep both devices on the same trusted LAN. Check private-network firewall permission, guest-client isolation and VPN routing. Discovery uses UDP 8767, control TCP 8766 and media TCP 8765. See [connection setup](docs/easy-connection.md).
+- **Connection cannot start:** another EXE or source-host instance may already be using the ports. Close that instance and try again. A second desktop instance asks you to use the existing window.
+- **Repeated buffering or resynchronization:** the network must sustain remux peak bitrate; some TV Ethernet ports are limited to 100 Mbps. Check local session details and the [hardware test guide](docs/hardware-test.md).
+- **Advanced controls:** **Settings & help → Advanced browser controller** opens the existing Windows-local controller on **http://localhost:8764**. Normal operation does not require a browser.
+
+To launch the portable EXE from PowerShell rather than double-clicking:
+
+```powershell
+.DualTheater-Windows-v0.4.0-beta.1-x64.exe
+```
+
+For Python launch commands, downloading/extracting the source ZIP, optional ADB installation and standalone mpv checks, use the [advanced command-line guide](docs/command-line.md). These steps are optional for EXE users.
 
 ## TV remote
 
@@ -214,6 +155,16 @@ The current target is an ordinary single-timeline MKV. Subtitles, playlists, vid
 ## Build and test
 
 For ongoing development or a new Codex session, start with [project context](docs/context.md) and follow [AGENTS.md](AGENTS.md). Updating the shared context after meaningful changes and before handoffs is mandatory. Whenever a project change makes installation or operating instructions outdated, update the affected README instructions in that same change before publishing.
+
+To build the Windows EXE from source on Windows with Python 3.11 x64:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv\Scripts\python.exe tools_src/build_windows.py
+```
+
+The result is `dist/DualTheater.exe`. Packaging includes Python/Tk, app resources, license notices and the original icon; it excludes user state and mpv. `tools_src/generate_icons.py` regenerates original artwork using the build-only Pillow dependency. Release CI checks the EXE's GUI/resources/local host start-stop without opening HDMI. Physical output remains a hardware test.
 
 The Python host uses the standard library. The Android project pins Media3 1.9.0, Android Gradle Plugin 8.13.2 and Gradle 8.13. Install JDK 17 or 21, Android SDK Platform 36 and Build Tools 36.1.0, then run:
 

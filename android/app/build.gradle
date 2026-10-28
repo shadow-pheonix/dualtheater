@@ -7,8 +7,8 @@ android {
         applicationId 'dev.dualtheater.tv'
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName '0.3.0-beta.1'
+        versionCode 6
+        versionName '0.4.0-beta.1'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

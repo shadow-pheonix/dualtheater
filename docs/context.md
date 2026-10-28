@@ -12,6 +12,12 @@ The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDM
 
 ## Current public state
 
+### In progress on main: desktop beta 0.4.0-beta.1
+
+A native Windows GUI and one-file EXE have been built locally with Connect, Player and Settings/help navigation. Python/Tk are bundled; the user selects an existing working mpv executable once. Saved setup, pairing and calibration use the private local application-data directory, separate from one-file extraction. The GUI calls the existing coordinator/barrier, not a separate playback implementation. Matching original dual-screen icons and a TV banner are included. Android version code is 6. These changes are not a published build until the new release is verified.
+
+Local desktop-beta checks: all 35 Python tests passed, including eight new desktop/settings/lifecycle tests and the four optional real-mpv null-output tests. The final packaged EXE passed GUI/resource/local-host smoke checks without HDMI playback; its icon group, version metadata, embedded licenses and relative module code paths were inspected. Android debug build, all 10 JVM tests, lint and APK signature verification passed. Native Connect/Player/Settings layouts were visually reviewed; a crowded pre-connection message was shortened. The documentation link/command/privacy scan passed and locked v0.1.1 checksums remain unchanged. These checks do not establish physical HDR/Atmos or lip-sync behavior in the desktop build.
+
 - Repository: [shadow-pheonix/dualtheater](https://github.com/shadow-pheonix/dualtheater), public, default branch `main`.
 - Published version: [v0.3.0-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.3.0-beta.1), explicitly a prerelease. Android version code is 5.
 - Downloads: development-signed TV APK, matching Windows host/source ZIP and SHA-256 checksums. Python and mpv are installed separately.
@@ -86,6 +92,9 @@ See [testing status](testing.md) and [hardware acceptance steps](hardware-test.m
 | `host/sync.py` | Clock estimates and video drift servo |
 | `host/discovery.py`, `host/pairing.py` | Discovery, pairing and remembered credentials |
 | `host/controller.html` | Local Windows browser controller |
+| `host/desktop.py`, `host/desktop_support.py`, `desktop_main.py` | Native desktop pages, private preferences, device selection and background host operations |
+| `tools_src/build_windows.py`, `requirements-build.txt` | Standalone Windows packaging with bundled resources, icon, version and runtime licenses |
+| `assets/`, `tools_src/generate_icons.py` | Original matching vector/Windows artwork and Android TV banner generation |
 | `android/app/src/main/java/dev/dualtheater/tv/` | TV UI, native video playback, remote controls, discovery and control client |
 | `tests/`, Android `app/src/test/` | Host/protocol/integration and Android JVM tests |
 | `.github/workflows/beta.yml` | Windows CI tests, Android build/lint, packaging and prerelease creation |
@@ -116,3 +125,4 @@ No current hardware validation results should be invented to close these items. 
 - 2026-10-27: Published the shared context and mandatory agent handoff rules. Clarified existing-hardware purpose and explicit Windows laptop/desktop HDMI or display-capable USB-C requirements; adapter TrueHD remains untested.
 - 2026-10-27: Added prominent direct beta APK/Windows ZIP/checksum links and documented download/extraction, prerequisites, optional ADB sideloading, host commands, pairing, movie loading, remote/browser operation, track changes, manual sync, reconnection and shutdown. Distinguished released functionality from proposed automatic calibration; no Windows installer or automatic calibration is claimed.
 - 2026-10-28: Finished the README guide and mandatory same-change instruction updates after an interrupted publishing attempt. Documentation verification checks all nine PowerShell blocks, 17 relative links/anchors, launcher/host flags, UI labels, release-runtime consistency, content/privacy and Git whitespace. No commands were executed against playback hardware and no new hardware tests were performed for these edits.
+- 2026-10-28: Built the portable desktop and matching Windows/Android icons for beta 0.4.0-beta.1. Added shared runtime lifecycle/rollback, private desktop storage, friendly endpoint selection, native movie/seek/track controls, reconnect reload gating and coordinated close. Updated README operating instructions, optional CLI guide and release CI. Local software/packaging checks passed as recorded above; publication and real-device validation are separate remaining steps.

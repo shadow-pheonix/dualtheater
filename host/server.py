@@ -15,6 +15,7 @@ import secrets
 import socket
 import socketserver
 import subprocess
+import sys
 import threading
 import time
 from urllib.parse import urlsplit
@@ -95,7 +96,9 @@ class Coordinator:
         self.pair_token = secrets.token_hex(6)
         self.pair_code = f'{secrets.randbelow(1000000):06d}'
         self.host_name = socket.gethostname()[:63]
-        self.pairings = PairingStore(ROOT / 'pairings.json')
+        self.data_dir = Path(getattr(args, 'data_dir', None) or ROOT)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.pairings = PairingStore(self.data_dir / 'pairings.json')
         self.ui_token = secrets.token_urlsafe(24)
         self.media_token = secrets.token_urlsafe(24)
         self.peer = self.mpv = self.media = None
@@ -105,7 +108,7 @@ class Coordinator:
         self.offset_ms = 0.0
         self.anchor_ms = 0.0
         self.duration_ms = 0.0
-        self.offset_file = ROOT / 'calibration.json'
+        self.offset_file = self.data_dir / 'calibration.json'
         if self.offset_file.exists():
             try:
                 self.offset_ms = finite(json.loads(self.offset_file.read_text())['video_lead_ms'], -2000, 2000)
@@ -123,7 +126,7 @@ class Coordinator:
         self.cancel = threading.Event()
         self.remote_queue = queue.Queue(maxsize=8)
         self.logs = deque(maxlen=40)
-        self.log_dir = ROOT / 'logs' / datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.log_dir = self.data_dir / 'logs' / datetime.now().strftime('%Y%m%d-%H%M%S-%f')
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.csv_file = (self.log_dir / 'timing.csv').open('w', newline='', encoding='utf-8')
         self.csv = csv.writer(self.csv_file)
@@ -135,12 +138,15 @@ class Coordinator:
         self.logs.append(line)
         with (self.log_dir / 'events.log').open('a', encoding='utf-8') as f:
             f.write(line + '\n')
-        print(line, flush=True)
+        if sys.stdout is not None:
+            print(line, flush=True)
 
     def snapshot(self):
         p = self.peer
         best = p.clock.best(ns()) if p else None
         return {'state': self.state, 'error': self.error, 'file': self.media.name if self.media else None,
+                'position_ms': self.audio_sample.get('position_ms', self.anchor_ms) if self.state == 'playing' else self.anchor_ms,
+                'duration_ms': self.duration_ms,
                 'epoch': self.epoch, 'video_lead_ms': self.offset_ms, 'drift_ms': self.drift_ms,
                 'video_speed': self.speed, 'audio': self.audio_info, 'audio_sample': self.audio_sample,
                 'tv': p.status if p else {}, 'connected': bool(p and not p.closed),
@@ -676,6 +682,59 @@ def lan_address():
             return '127.0.0.1'
 
 
+class HostRuntime:
+    """Own the same host services for both CLI and desktop, including rollback."""
+    def __init__(self, args, mpv_factory=Mpv):
+        self.args = args
+        self.app = Coordinator(args, mpv_factory)
+        self.servers = []
+        self.serving = []
+        self.discovery = None
+        self.closed = False
+
+    def start(self):
+        try:
+            for address, field, local in [('127.0.0.1', 'ui_port', True),
+                                          ('0.0.0.0', 'media_port', False)]:
+                server = ThreadingHTTPServer((address, getattr(self.args, field)), HttpHandler)
+                server.daemon_threads = True
+                server.app, server.local_ui = self.app, local
+                self.servers.append(server)
+                setattr(self.args, field, server.server_port)
+            control = ThreadServer(('0.0.0.0', self.args.control_port), ControlHandler)
+            control.app = self.app
+            self.servers.append(control)
+            self.args.control_port = control.server_address[1]
+            for service in self.servers:
+                thread = threading.Thread(target=service.serve_forever, daemon=True)
+                thread.start()
+                self.serving.append(service)
+            for target in (self.app.monitor, self.app.heartbeat, self.app.remote_worker):
+                threading.Thread(target=target, daemon=True).start()
+            try:
+                self.discovery = DiscoveryServer(self.app, port=self.args.discovery_port)
+                self.args.discovery_port = self.discovery.socket.getsockname()[1]
+                threading.Thread(target=self.discovery.serve, daemon=True).start()
+            except OSError as e:
+                self.app.log('LAN discovery unavailable; use Advanced connection: ' + str(e))
+            return self
+        except Exception:
+            self.close()
+            raise
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        self.app.close()
+        if self.discovery:
+            self.discovery.close()
+        for service in self.servers:
+            if service in self.serving:
+                service.shutdown()
+            service.server_close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mpv', default='mpv.exe')
@@ -685,34 +744,17 @@ def main():
     parser.add_argument('--media-port', type=int, default=8765)
     parser.add_argument('--control-port', type=int, default=8766)
     parser.add_argument('--discovery-port', type=int, default=DISCOVERY_PORT)
+    parser.add_argument('--data-dir', help='Private settings/log directory (default: source folder)')
     parser.add_argument('--list-devices', action='store_true')
     parser.add_argument('--diagnostic', action='store_true', help='Allow PCM only for development; not an Atmos test')
     args = parser.parse_args()
     if args.list_devices:
         subprocess.run([args.mpv, '--no-config', '--audio-device=help'], check=True)
         return
-    app = Coordinator(args)
-    servers = []
-    discovery = None
+    runtime = HostRuntime(args)
+    app = runtime.app
     try:
-        for address, port, local in [('127.0.0.1', args.ui_port, True), ('0.0.0.0', args.media_port, False)]:
-            server = ThreadingHTTPServer((address, port), HttpHandler)
-            server.daemon_threads = True
-            server.app, server.local_ui = app, local
-            servers.append(server)
-        control = ThreadServer(('0.0.0.0', args.control_port), ControlHandler)
-        control.app = app
-        servers.append(control)
-        for server in servers:
-            threading.Thread(target=server.serve_forever, daemon=True).start()
-        threading.Thread(target=app.monitor, daemon=True).start()
-        threading.Thread(target=app.heartbeat, daemon=True).start()
-        threading.Thread(target=app.remote_worker, daemon=True).start()
-        try:
-            discovery = DiscoveryServer(app, port=args.discovery_port)
-            threading.Thread(target=discovery.serve, daemon=True).start()
-        except OSError as e:
-            app.log('LAN discovery unavailable; use Advanced connection: ' + str(e))
+        runtime.start()
         print(f'Controller: http://127.0.0.1:{args.ui_port}\n'
               f'TV app: choose {app.host_name}; first-time pairing code: {app.pair_code}\n'
               f'Advanced connection: {args.host}:{args.control_port}; token: {app.pair_token}\n'
@@ -721,12 +763,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        app.close()
-        if discovery:
-            discovery.close()
-        for server in servers:
-            server.shutdown()
-            server.server_close()
+        runtime.close()
 
 
 if __name__ == '__main__':

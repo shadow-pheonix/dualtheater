@@ -23,6 +23,23 @@ jobs:
           python-version: '3.11'
       - name: Host and protocol tests
         run: python -m unittest discover -s tests -v
+      - name: Build standalone Windows desktop
+        run: |
+          python -m pip install -r requirements-build.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools_src/build_windows.py --dist dist/windows --work build/windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke-test packaged desktop without HDMI playback
+        shell: pwsh
+        run: |
+          $result = Join-Path $env:RUNNER_TEMP 'desktop-smoke.json'
+          $exe = (Resolve-Path dist/windows/DualTheater.exe).Path
+          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', ('"' + $result + '"')) -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Desktop smoke test timed out.' }
+          if ($process.ExitCode -ne 0) { throw 'Desktop smoke test failed.' }
+          $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
+          if ($report.gui -ne 'passed' -or $report.host_start_stop -ne 'passed') { throw 'Desktop smoke test did not pass.' }
+          Write-Host 'Native GUI, bundled resources and local host start/stop passed; physical playback was not tested.'
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -44,6 +61,7 @@ jobs:
           if ($version -notmatch '-beta\.') { throw 'Only beta versions may use this release workflow.' }
           "version=$version" >> $env:GITHUB_OUTPUT
           New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item dist/windows/DualTheater.exe "dist/DualTheater-Windows-v$version-x64.exe"
           Copy-Item android/app/build/outputs/apk/debug/app-debug.apk "dist/DualTheater-TV-v$version-debug.apk"
           git archive --format=zip --prefix=dualtheater/ --output="dist/DualTheater-v$version.zip" HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Source archive failed.' }
@@ -53,7 +71,11 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: experimental-beta
-          path: dist/
+          path: |
+            dist/DualTheater-*.exe
+            dist/DualTheater-*.apk
+            dist/DualTheater-*.zip
+            dist/SHA256SUMS.txt
           retention-days: 7
 
   publish:

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-beta.1 — portable Windows desktop beta
+
+- Single-file Windows x64 EXE with included Python/Tk runtime; no installer or console required.
+- Connect, Player and Settings/help pages, friendly audio-device selection, native movie picker, timeline, exact/relative seeking and track controls.
+- Saved mpv/HDMI setup and private application-data storage; remembered setup starts the connection automatically when the saved endpoint is available.
+- Shared host lifecycle for CLI and GUI, rollback on startup failure and coordinated shutdown/reload handling.
+- Matching original dual-screen app icons for Windows/Android and a branded Android TV launcher banner.
+- Windows packaging and packaged GUI/resource/start-stop smoke tests in release CI.
+
+mpv remains a separate executable selected once. Physical A/V sync and HDR/Atmos behavior through the desktop build still need device testing.
+
 ## 0.3.0-beta.1 — experimental public beta
 
 - Public Android TV/Google TV positioning with device-dependent HDR compatibility.

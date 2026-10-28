@@ -39,3 +39,10 @@ test-results*.txt
 live-timing.json
 Thumbs.db
 .DS_Store
+
+# Windows desktop packaging output / local recovery data
+dist/
+build/
+*.spec
+*.exe
+settings.local.*

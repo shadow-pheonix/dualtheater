@@ -4,6 +4,14 @@ The Windows host serves the original seekable media file byte-for-byte over HTTP
 
 The same local file is read by mpv on Windows for compressed TrueHD output through WASAPI exclusive mode. mpv IPC stays on a randomly named local Windows pipe. The network protocol exposes only a small set of playback operations, not arbitrary mpv commands.
 
+## Windows interfaces and storage
+
+The native Tk desktop (`host/desktop.py`) and optional CLI share `Coordinator` and `HostRuntime` in `host/server.py`. The desktop sends slow operations to a background worker and polls status separately, keeping file selection/navigation responsive while the existing transport barrier waits for readiness. It adds no alternative timing engine and does not change mpv passthrough flags or the video servo.
+
+`HostRuntime` binds the required services, rolls back partial startup failures and closes owned resources on shutdown. Desktop setup and media controls remain local Python calls; they are not new unauthenticated network endpoints. The optional browser controller retains its existing localhost/token restrictions.
+
+The portable EXE bundles Python, Tk, HTML/Lua resources, app artwork and upstream license notices through PyInstaller. Runtime resources follow `__file__` inside the bundle; writable state is explicitly separate under `%LOCALAPPDATA%\DualTheater`. The CLI still defaults to its source folder and optionally accepts `--data-dir`. Desktop mpv/endpoint preferences are in `settings.local.json`; unreadable settings are preserved before explicit replacement. The desktop does not import old credentials automatically or overwrite a different application's settings. mpv remains a separately selected executable.
+
 ## Timing
 
 - Host time uses `perf_counter_ns`; TV time uses `System.nanoTime`.
