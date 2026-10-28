@@ -47,6 +47,7 @@ metadata.write_text(f'''VSVersionInfo(
 ''',encoding='utf-8')
 command += ['--version-file',str(metadata)]
 for source, destination in ((root/'host/controller.html','host'),(root/'host/select_audio.lua','host'),
+                            (root/'calibration-phone-SDR-TrueHD.mkv','.'),
                             (root/'assets/dualtheater.ico','assets'),(root/'assets/dualtheater.png','assets'),
                             (root/'THIRD_PARTY_NOTICES.md','.'),(licenses,'licenses')):
     command += ['--add-data',str(source)+';'+destination]

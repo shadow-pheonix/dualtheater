@@ -67,7 +67,7 @@ class PairingStore:
                 failures.append(now)
                 raise ValueError('Enter the six-digit code shown on the laptop')
             if client_id not in self.devices and len(self.devices) >= 32:
-                raise ValueError('This laptop already remembers 32 TVs')
+                raise ValueError('This computer already remembers 32 devices')
             trusted = secrets.token_urlsafe(32)
             previous = self.devices.get(client_id)
             self.devices[client_id] = {'name': str(name)[:80], 'token': trusted}

@@ -37,6 +37,9 @@ for kind, points, fill, stroke, width in shapes:
 (ASSETS/'dualtheater.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">\n'+'\n'.join(svg)+'\n</svg>\n',encoding='utf-8')
 drawable = ROOT/'android/app/src/main/res/drawable/icon.xml'
 drawable.write_text('<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="256" android:viewportHeight="256">\n'+'\n'.join(android)+'\n</vector>\n',encoding='utf-8')
+phone_drawable = ROOT/'android/calibration/src/main/res/drawable/icon.xml'
+phone_drawable.parent.mkdir(parents=True,exist_ok=True)
+phone_drawable.write_text(drawable.read_text(encoding='utf-8'),encoding='utf-8')
 
 scale = 4
 image = Image.new('RGBA',(256*scale,256*scale))

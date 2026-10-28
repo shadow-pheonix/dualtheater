@@ -32,10 +32,11 @@ Local checks: all 46 Python tests passed with the actual upstream-downloaded run
 ## Active feature branch (unreleased)
 
 - User requested development on `feature/playback-reliability` while the TV is unavailable because of a power outage. Local `main` remains at `7debf90`; preserve the published/base build. Do not merge or publish this work as part of feature development.
-- The selected feature is playback diagnostics and sanitized export. Branch builds use `0.5.0-beta.1` (Android version code 8); the public download remains `0.4.1-beta.1`.
+- The initial feature was playback diagnostics and sanitized export. Phone calibration v1 is now authorized and being implemented without a separate reference fixture. Branch host/TV builds use `0.5.0-beta.2` (TV version code 9); the phone client is `0.1.0-beta.1`. Public downloads remain `0.4.1-beta.1`.
 - Implemented in the branch: a native Diagnostics page and browser report export, bounded timing statistics, operation/failure/recovery/disconnect counters, buffer/transfer/frame-drop telemetry, and an explicit report field allowlist. Playback epochs now reset per authenticated TV connection, with callback-generation invalidation across restarts. The host pauses if a replacement TV session reports a different playback epoch, preventing old audio from continuing through a fast reconnect. The original-media and audio/barrier invariants remain in force.
 - Preview desktop state is isolated under `%LOCALAPPDATA%\DualTheater-Preview`; it does not import or overwrite the base profile. The TV preview uses `dev.dualtheater.tv.preview`, allowing both TV apps and their preferences to coexist. The Java namespace remains unchanged. Run only one host because default ports and the desktop instance mutex are shared.
-- Final branch checks on Linux: 52 Python tests passed and four Windows/mpv tests were skipped (56 total). Android debug assembly and all 14 Gradle JVM tests passed; lint completed with zero errors and 23 warnings. APK signature, preview package/launch activity, version alignment, JavaScript/Python syntax and documentation link/whitespace checks passed. Windows frozen-EXE/GUI checks were extended in CI but were not run here; Tkinter is unavailable on this Linux interpreter. No TV/HDMI or physical-sync validation has been performed.
+- Phone v1 branch checks on Linux: 62 Python tests passed and four Windows/mpv tests were skipped (66 total). Both Android debug apps assembled and all 25 Gradle JVM tests passed (14 TV, 11 phone). Lint completed with zero errors, 23 TV warnings and 14 phone warnings. Windows frozen-EXE/GUI checks were extended in CI but were not run here; Tkinter is unavailable on this interpreter. Both APK signatures/package IDs/launch activities, fixture hash, version alignment, Python/JavaScript syntax and 49 relative documentation links/anchors passed verification. No phone/TV/HDMI or physical-sync validation has been performed.
+- 2026-10-28 phone calibration v1: Implemented the separate phone module and paired calibration role alongside the TV socket. Camera REALTIME and audio TIMEBASE_BOOTTIME share elapsed realtime; event differences do not depend on network trigger timing. The original 22-second SDR/stereo TrueHD reference has six irregular cues, a pinned SHA-256 and explicit Apply through Coordinator.action. External FFmpeg decoding verified source video frames and audio onsets within 0.1 ms (observed difference at most one 48 kHz sample). Raw frames/PCM stay in memory. Unsupported clocks, discontinuities, incomplete/noisy capture and stale playback are rejected. Capture stops on backgrounding/cancel; disconnect cancels owned playback. Atomic offset replacement preserves the prior setting on failure. A separate physical reference fixture is not required; it remains optional future accuracy validation. Hardware capture/playback is unvalidated and user TV access remains unavailable.
 
 ## Architecture and invariants
 
@@ -106,6 +107,7 @@ See [testing status](testing.md) and [hardware acceptance steps](hardware-test.m
 | `host/controller.html` | Local Windows browser controller |
 | `host/player_download.py` | Explicit upstream download, integrity checks, safe staged extraction and private offline runtime |
 | `host/diagnostics.py`, `docs/diagnostics.md` | Unreleased bounded session metrics, shareable report allowlist and preview instructions |
+| `host/calibration.py`, `android/calibration/`, `docs/phone-calibration.md` | Phone role, owned test runs, capture-clock measurement, explicit saved-offset Apply and setup |
 | `host/desktop.py`, `host/desktop_support.py`, `desktop_main.py` | Native desktop pages, private preferences, device selection and background host operations |
 | `tools_src/build_windows.py`, `requirements-build.txt` | Standalone Windows packaging with bundled resources, icon, version and runtime licenses |
 | `assets/`, `tools_src/generate_icons.py` | Original matching vector/Windows artwork and Android TV banner generation |
@@ -127,7 +129,7 @@ The included calibration clip is original SDR H.264 video with stereo TrueHD and
 
 ## Next work
 
-Keep feature work on `feature/playback-reliability` until the user chooses to integrate it. The software-only diagnostics/reconnect work is complete; next validate the Windows preview's native UI/frozen EXE, then test the matching preview apps on hardware when available. Preserve the base apps and do not publish or merge as part of this handoff.
+Keep feature work on `feature/playback-reliability` until the user chooses to integrate it. Diagnostics/reconnect and phone calibration v1 software work are complete. Next validate the Windows preview's native UI/frozen EXE and the phone's actual permissions, capture capability, lifecycle, pairing and timestamp behavior, then test the matching apps on TV/HDMI hardware when available. Preserve the base apps; do not publish or merge as part of this handoff. No separate physical reference fixture is a prerequisite for v1 testing.
 
 1. When the user has power and devices available, validate remote seek/play-pause, discovery and pairing on hardware.
 2. Calibrate physical A/V offset and check repeated seek/resume operations before claiming stable sync. Log measured drift separately from the user's perceived/externally measured lip-sync.
@@ -137,6 +139,8 @@ Keep feature work on `feature/playback-reliability` until the user chooses to in
 No current hardware validation results should be invented to close these items. Do not store private addresses, media filenames, personal paths, endpoint identifiers, credentials, raw logs or signing keys in this context.
 
 ## Recent progress
+
+- 2026-10-28 (phone calibration v1): Implemented the user-requested phone client without requiring a separate physical reference fixture. Added capture-clock analysis, irregular original reference, paired phone protocol/run ownership, explicit Apply, atomic saves, cancellation/recovery checks, Android/host tests and build/setup documentation. Software/source-asset results and remaining device acceptance are recorded above. Local preview development only; no base build change, merge, push or publication.
 
 - 2026-10-28 (preview feature development): Created `feature/playback-reliability` from the preserved base commit. Added diagnostics/export, reconnect generation protection, regression coverage and isolated desktop/Android preview profiles as detailed above. Final software checks passed with the recorded skips/warnings. The user reported no TV access during a power outage; no hardware commands were run. No merge, push or release was performed.
 

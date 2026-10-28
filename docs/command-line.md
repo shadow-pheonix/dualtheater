@@ -1,5 +1,7 @@
 # Advanced source/command-line guide
 
+The downloads and published-build instructions below describe `0.4.1-beta.1`. Current feature-branch source `0.5.0-beta.2` additionally supports the separate [phone calibration client](phone-calibration.md), using the same host launch commands. Use a fresh source folder or `--data-dir` for its private state; keep the public/base build intact.
+
 The portable Windows EXE is the recommended interface; see the [main README](../README.md#how-to-use). This optional guide is for running the Python source host. The source ZIP still requires Python and mpv. Do not run it alongside the desktop EXE because both use the same default service ports. ADB is only an optional TV installation method.
 
 ## How to use
@@ -121,7 +123,7 @@ The original MKV remains on Windows throughout playback. Keep the host running a
 
 Use **Calibrate physical latency** in the Windows browser controller while watching a clear sound/picture event. Increase **Video lead** if sound arrives before the picture; decrease it if sound arrives late. Use the 10 ms buttons or enter a value, press **Save**, then **Resynchronize** to apply a large adjustment immediately. The offset is saved across launches. These controls do not re-encode or change the speed of the TrueHD audio.
 
-You can load the included `calibration-SDR-TrueHD-no-Atmos.mkv` using its full extracted path for a flash/beep test. It is **SDR with stereo TrueHD, not an HDR/Atmos sample**; confirm the result again with the actual movie and processing modes. Automatic camera/microphone calibration and a dedicated TV calibration screen are not implemented in this beta. Physical sync after start, seek and pause/resume still needs hardware validation.
+You can load the included `calibration-SDR-TrueHD-no-Atmos.mkv` using its full extracted path for a flash/beep test. It is **SDR with stereo TrueHD, not an HDR/Atmos sample**; confirm the result again with the actual movie and processing modes. Automatic camera/microphone calibration is absent from the published beta; the development branch has a separate [phone client](phone-calibration.md). A dedicated TV calibration screen is not included. Physical sync after start, seek and pause/resume still needs hardware validation.
 
 ### Common setup problems
 

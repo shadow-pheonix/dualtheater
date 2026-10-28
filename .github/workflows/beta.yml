@@ -71,6 +71,10 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item dist/windows/DualTheater.exe "dist/DualTheater-Windows-v$version-x64.exe"
           Copy-Item android/app/build/outputs/apk/debug/app-debug.apk "dist/DualTheater-TV-v$version-debug.apk"
+          $phoneText = Get-Content android/calibration/build.gradle -Raw
+          $phoneVersion = [regex]::Match($phoneText, "versionName '([^']+)'").Groups[1].Value
+          if (-not $phoneVersion) { throw 'Calibration client version is missing.' }
+          Copy-Item android/calibration/build/outputs/apk/debug/calibration-debug.apk "dist/DualTheater-Calibration-v$phoneVersion-debug.apk"
           git archive --format=zip --prefix=dualtheater/ --output="dist/DualTheater-v$version.zip" HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Source archive failed.' }
           Get-ChildItem dist -File | Sort-Object Name | Get-FileHash -Algorithm SHA256 | ForEach-Object {

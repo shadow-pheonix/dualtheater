@@ -1,5 +1,7 @@
 # Connection setup
 
+The unreleased `0.5.0-beta.2` preview also supports a separate paired phone calibration role on the same control port, alongside the TV socket. The phone uses the displayed six-digit code and receives its own remembered credential. See [phone calibration setup](phone-calibration.md); published `0.4.1-beta.1` builds do not contain this feature.
+
 In the Windows desktop EXE, click **Download mpv** on **Connect** (or **Browse…** for an existing build), wait for automatic selection and choose the HDMI audio device, then click **Start TV connection**. The setup is remembered; later launches start the connection when the saved endpoint is still available. Open the TV app and select the computer's name. Enter its six-digit code once; the code appears on Connect. Paired TVs can reconnect automatically when they discover that computer again. The app switches to Player after connection; choose a movie and click Load movie, then Play.
 
 The optional command-line host shows the same code in its terminal and browser controller at **http://localhost:8764**. The browser is not required for the desktop EXE. Only run one host instance on the default ports.
