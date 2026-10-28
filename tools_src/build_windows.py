@@ -52,4 +52,4 @@ for source, destination in ((root/'host/controller.html','host'),(root/'host/sel
     command += ['--add-data',str(source)+';'+destination]
 command.append(str(root/'desktop_main.py'))
 subprocess.run(command,cwd=root,check=True)
-print('Built portable DualTheater.exe. Python/Tk are included; mpv is selected separately.')
+print('Built portable DualTheater.exe. Python/Tk are included; use Download mpv or Browse on Connect.')

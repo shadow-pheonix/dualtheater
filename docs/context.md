@@ -12,6 +12,12 @@ The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDM
 
 ## Current public state
 
+### In progress: 0.4.1-beta.1 mpv setup
+
+The user chose an in-app upstream download instead of embedding/redistributing mpv. `host/player_download.py` pins the official v0.41.0 baseline x64 Windows ZIP by URL, SHA-256 and size, validates/extracts its nested ZIP with supporting DLLs, probes startup without audio, and installs in private `players/` storage. Connect has Download mpv, progress and automatic selection/device refresh; Browse preserves custom builds. Managed-cache file hashes are checked before automatic reuse. Installation is staged; failures/cancellation retain prior players. No silent updates. Android version code is 7; no TV behavior change.
+
+Local checks completed: all 46 Python tests passed with the actual upstream-downloaded runtime, including 11 downloader/worker tests and four real-mpv TrueHD/null-output tests. After final desktop refinements, all 19 desktop/downloader tests passed again. The frozen EXE independently downloaded, verified, extracted and automatically selected mpv, refreshed device enumeration, launched the external runtime and started/stopped temporary host services; no HDMI output was opened. Android debug build, all 10 JVM tests, lint and APK signature verification passed. Documentation checks passed for 30 relative links/anchors and 11 PowerShell blocks; public-file privacy/resource/code-path checks passed and locked v0.1.1 hashes remain unchanged. README and related guides describe the new setup with release-pending wording. GitHub CI/publication and independent verification of its assets are next. No new physical playback observations.
+
 ### Published desktop beta 0.4.0-beta.1
 
 A native Windows GUI and one-file EXE are published with Connect, Player and Settings/help navigation. Python/Tk are bundled; the user selects an existing working mpv executable once. Saved setup, pairing and calibration use the private local application-data directory, separate from one-file extraction. The GUI calls the existing coordinator/barrier, not a separate playback implementation. Matching original dual-screen icons and a TV banner are included. Android version code is 6.
@@ -94,6 +100,7 @@ See [testing status](testing.md) and [hardware acceptance steps](hardware-test.m
 | `host/sync.py` | Clock estimates and video drift servo |
 | `host/discovery.py`, `host/pairing.py` | Discovery, pairing and remembered credentials |
 | `host/controller.html` | Local Windows browser controller |
+| `host/player_download.py` | Explicit upstream download, integrity checks, safe staged extraction and private offline runtime |
 | `host/desktop.py`, `host/desktop_support.py`, `desktop_main.py` | Native desktop pages, private preferences, device selection and background host operations |
 | `tools_src/build_windows.py`, `requirements-build.txt` | Standalone Windows packaging with bundled resources, icon, version and runtime licenses |
 | `assets/`, `tools_src/generate_icons.py` | Original matching vector/Windows artwork and Android TV banner generation |
@@ -123,6 +130,8 @@ The included calibration clip is original SDR H.264 video with stereo TrueHD and
 No current hardware validation results should be invented to close these items. Do not store private addresses, media filenames, personal paths, endpoint identifiers, credentials, raw logs or signing keys in this context.
 
 ## Recent progress
+
+- 2026-10-28: Implemented and locally validated the user-approved download alternative to bundling mpv. Pinning/provenance, offline reuse, cancellation, manual fallback and hardware-test limits are documented. All 46 Python tests, packaged download/selection smoke checks and matching Android checks passed; GitHub validation/publication is next.
 
 - 2026-10-27: Published the shared context and mandatory agent handoff rules. Clarified existing-hardware purpose and explicit Windows laptop/desktop HDMI or display-capable USB-C requirements; adapter TrueHD remains untested.
 - 2026-10-27: Added prominent direct beta APK/Windows ZIP/checksum links and documented download/extraction, prerequisites, optional ADB sideloading, host commands, pairing, movie loading, remote/browser operation, track changes, manual sync, reconnection and shutdown. Distinguished released functionality from proposed automatic calibration; no Windows installer or automatic calibration is claimed.

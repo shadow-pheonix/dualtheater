@@ -11,18 +11,25 @@ import sys
 import threading
 
 from .server import HostRuntime, lan_address
+from .player_download import managed_player, install_player
 
-VERSION = '0.4.0-beta.1'
+VERSION = '0.4.1-beta.1'
 
 
 def default_data_dir():
     return Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData/Local') / 'DualTheater'
 
 
-def find_mpv(saved='', executable_dir=None):
+def find_mpv(saved='', executable_dir=None, data_dir=None):
     directory = Path(executable_dir or (Path(sys.executable).parent if getattr(sys, 'frozen', False)
                                       else Path(__file__).resolve().parent.parent))
-    for candidate in (saved, directory / 'mpv.exe', directory / 'tools/mpv.exe', shutil.which('mpv.exe')):
+    data_dir = Path(data_dir or default_data_dir())
+    downloaded = managed_player(data_dir)
+    # Saved managed paths must pass the receipt check, including supporting DLLs.
+    if saved and Path(saved).resolve().is_relative_to((data_dir/'players').resolve()):
+        saved = downloaded
+    for candidate in (saved, downloaded,
+                      directory / 'mpv.exe', directory / 'tools/mpv.exe', shutil.which('mpv.exe')):
         if candidate and Path(candidate).is_file():
             return str(Path(candidate).resolve())
     return ''
@@ -76,7 +83,7 @@ def parse_devices(output):
     return devices
 
 
-def list_devices(executable):
+def list_devices(executable, allow_empty=False):
     if not Path(executable).is_file():
         raise ValueError('Select mpv.exe first.')
     result = subprocess.run([str(executable), '--no-config', '--audio-device=help'],
@@ -85,7 +92,7 @@ def list_devices(executable):
     if result.returncode:
         raise RuntimeError('mpv could not list audio devices. Choose a working Windows mpv build.')
     devices = parse_devices((result.stdout + result.stderr).decode('utf-8', errors='replace'))
-    if not devices:
+    if not devices and not allow_empty:
         raise RuntimeError('No Windows WASAPI devices found. Check the HDMI connection and refresh.')
     return devices
 
@@ -114,12 +121,17 @@ class DesktopService:
         self.commands = queue.Queue(maxsize=8)
         self.events = queue.Queue()
         self.closed = threading.Event()
+        self.cancel_download = threading.Event()
         self.worker = threading.Thread(target=self._work, daemon=True)
         self.poller = threading.Thread(target=self._poll, daemon=True)
         self.worker.start()
         self.poller.start()
 
     def submit(self, operation, **values):
+        if operation == 'download_mpv':
+            self.cancel_download.clear()
+        if operation in ('stop', 'close'):
+            self.cancel_download.set()
         if operation in ('stop', 'close') or (operation == 'action' and values.get('action') == 'pause'):
             if self.runtime:
                 self.runtime.app.cancel.set()
@@ -137,6 +149,10 @@ class DesktopService:
             try:
                 if operation == 'devices':
                     self.events.put(('devices', list_devices(values['mpv'])))
+                elif operation == 'download_mpv':
+                    player = install_player(self.directory, cancel=self.cancel_download,
+                        progress=lambda message:self.events.put(('download_progress',message)))
+                    self.events.put(('mpv_ready',player))
                 elif operation == 'start':
                     if self.runtime:
                         raise RuntimeError('Stop the connection before changing audio setup.')

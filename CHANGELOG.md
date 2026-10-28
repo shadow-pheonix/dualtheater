@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1-beta.1 — automatic mpv setup
+
+- Download mpv directly from its official Windows release inside the desktop app; checksum verification, nested ZIP extraction, DLL retention and automatic selection.
+- Private offline cache with file-integrity checks, staged installation, cancellation and manual Browse fallback.
+- Upstream-download and real-mpv null-output checks in release CI, plus external-player startup from the frozen EXE.
+
+mpv is not redistributed in the EXE. HDMI passthrough with this downloaded build and physical A/V sync still need hardware testing.
+
 ## 0.4.0-beta.1 — portable Windows desktop beta
 
 - Single-file Windows x64 EXE with included Python/Tk runtime; no installer or console required.

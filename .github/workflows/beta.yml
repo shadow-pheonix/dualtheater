@@ -21,8 +21,15 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
-      - name: Host and protocol tests
-        run: python -m unittest discover -s tests -v
+      - name: Verify upstream mpv download and host tests with null audio output
+        shell: pwsh
+        run: |
+          $playerData = Join-Path $env:RUNNER_TEMP 'dualtheater-player-check'
+          $env:DUALTHEATER_MPV = python -c "import sys; from host.player_download import install_player; print(install_player(sys.argv[1]))" $playerData
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "DUALTHEATER_MPV=$env:DUALTHEATER_MPV" >> $env:GITHUB_ENV
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build standalone Windows desktop
         run: |
           python -m pip install -r requirements-build.txt
@@ -33,13 +40,14 @@ jobs:
         shell: pwsh
         run: |
           $result = Join-Path $env:RUNNER_TEMP 'desktop-smoke.json'
+          $env:DUALTHEATER_SMOKE_DOWNLOAD = '1'
           $exe = (Resolve-Path dist/windows/DualTheater.exe).Path
           $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', ('"' + $result + '"')) -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Desktop smoke test timed out.' }
           if ($process.ExitCode -ne 0) { throw 'Desktop smoke test failed.' }
           $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
-          if ($report.gui -ne 'passed' -or $report.host_start_stop -ne 'passed') { throw 'Desktop smoke test did not pass.' }
-          Write-Host 'Native GUI, bundled resources and local host start/stop passed; physical playback was not tested.'
+          if ($report.gui -ne 'passed' -or $report.host_start_stop -ne 'passed' -or $report.external_player -ne 'passed' -or $report.download_select -ne 'passed') { throw 'Desktop smoke test did not pass.' }
+          Write-Host 'Native GUI, bundled resources, external mpv and local host start/stop passed; physical playback was not tested.'
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin

@@ -7,13 +7,15 @@ from pathlib import Path
 import queue
 import sys
 import tempfile
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
 from .desktop_support import (DesktopService, Settings, VERSION, default_data_dir,
-                              find_mpv, format_time, runtime_args)
+                              find_mpv, format_time, list_devices, runtime_args)
 from .server import HostRuntime
+from .player_download import DOWNLOAD_PAGE
 
 
 class DesktopWindow:
@@ -27,12 +29,13 @@ class DesktopWindow:
         self.track_key = None
         self.status = {}
         self.running = self.busy = self.closing = self.dragging = False
+        self.downloading = False
         self.auto_start = auto_start
         self.was_connected = False
         self.require_reload = True
         self.offset_loaded = False
         self.error_text = tk.StringVar(value=self.settings.warning)
-        self.mpv_path = tk.StringVar(value=find_mpv(self.settings.values.get('mpv', '')))
+        self.mpv_path = tk.StringVar(value=find_mpv(self.settings.values.get('mpv', ''),data_dir=self.directory))
         self.movie_path = tk.StringVar()
         self.audio_device = tk.StringVar()
         self.connection_text = tk.StringVar(value='Choose your HDMI audio output to begin.')
@@ -91,12 +94,14 @@ class DesktopWindow:
 
     def _connect_page(self):
         ttk.Label(self.connect, text='Audio setup — saved after the first connection', style='Heading.TLabel').pack(anchor='w')
-        self.note(self.connect, 'Connect HDMI to your soundbar/receiver and select its HDMI input. Choose the mpv build that works with your system.')
+        self.download_hint = self.note(self.connect, 'Connect HDMI to the receiver input. Click Download mpv for automatic setup, or Browse to use your own player.')
         path_row = ttk.Frame(self.connect)
         path_row.pack(fill='x', pady=4)
         ttk.Label(path_row, text='mpv.exe', width=12).pack(side='left')
         self.mpv_entry = ttk.Entry(path_row, textvariable=self.mpv_path)
         self.mpv_entry.pack(side='left', fill='x', expand=True, padx=(0, 8))
+        self.download_button = ttk.Button(path_row, text='Download mpv', command=self.download_mpv)
+        self.download_button.pack(side='left', padx=(0, 8))
         self.mpv_button = ttk.Button(path_row, text='Browse…', command=self.choose_mpv)
         self.mpv_button.pack(side='left')
         audio_row = ttk.Frame(self.connect)
@@ -182,8 +187,11 @@ class DesktopWindow:
         self.browser_button = ttk.Button(row, text='Advanced browser controller', command=self.open_browser)
         self.browser_button.pack(side='left', padx=8)
         ttk.Button(row, text='Project instructions', command=lambda: webbrowser.open('https://github.com/shadow-pheonix/dualtheater#how-to-use')).pack(side='left')
-        self.note(self.options, 'mpv remains a separate player: use Browse on Connect to select it once. Python is included in the Windows EXE. When changing audio setup, disconnect first; playback stops on both devices. Reconnect and reload the movie afterward.')
-        ttk.Button(self.options, text='Third-party licenses', command=self.open_licenses).pack(anchor='w', pady=(0, 8))
+        self.note(self.options, 'Download mpv on Connect fetches a checksum-pinned Windows package directly from the official mpv GitHub release. It is selected automatically and kept locally for offline use afterward. Browse lets you choose your own build instead. Disconnect before changing audio setup, then reconnect and reload the movie.')
+        licenses = ttk.Frame(self.options)
+        licenses.pack(anchor='w', pady=(0, 8))
+        ttk.Button(licenses, text='Third-party licenses', command=self.open_licenses).pack(side='left')
+        ttk.Button(licenses, text='mpv download / source', command=lambda:webbrowser.open(DOWNLOAD_PAGE)).pack(side='left', padx=(8, 0))
         ttk.Label(self.options, text='Local session details — may contain private paths/device information').pack(anchor='w')
         self.details = tk.Text(self.options, height=10, wrap='word', state='disabled', font=('Consolas', 9))
         self.details.pack(fill='both', expand=True, pady=6)
@@ -201,6 +209,13 @@ class DesktopWindow:
         self.device_box['values'] = []
         self.device_box.set('')
         self._queue('devices', mpv=self.mpv_path.get().strip().strip('"'))
+
+    def download_mpv(self):
+        self.auto_start = False
+        self.downloading = True
+        self.error_text.set('')
+        self.download_hint.configure(text='Downloading from the official mpv GitHub release. Existing players are kept; close the app to cancel.')
+        self._queue('download_mpv')
 
     def start(self):
         index = self.device_box.current()
@@ -305,6 +320,15 @@ class DesktopWindow:
                         self.activity.stop()
                 elif kind == 'error':
                     self.error_text.set(value)
+                    if self.downloading:
+                        self.downloading = False
+                        self.download_hint.configure(text='mpv setup did not complete. Check the error below, retry Download mpv or use Browse. Your previous player was kept.')
+                elif kind == 'download_progress':
+                    self.download_hint.configure(text=value)
+                elif kind == 'mpv_ready':
+                    self.downloading = False
+                    self.mpv_path.set(value)
+                    self.refresh_devices()
                 elif kind == 'devices':
                     self.devices = value
                     self.device_box['values'] = [d['label'] for d in value]
@@ -403,7 +427,7 @@ class DesktopWindow:
     def _update_controls(self):
         idle = not self.busy and not self.closing
         setup = idle and not self.running
-        for control in (self.mpv_entry, self.mpv_button, self.refresh_button):
+        for control in (self.mpv_entry, self.mpv_button, self.refresh_button, self.download_button):
             control.configure(state='normal' if setup else 'disabled')
         self.device_box.configure(state='readonly' if setup else 'disabled')
         self.start_button.configure(state='normal' if setup and self.devices else 'disabled')
@@ -439,6 +463,20 @@ def smoke_test(path):
         window = DesktopWindow(root, directory, auto_start=False)
         root.update()
         assert len(window.tabs.tabs()) == 3
+        download_check = 'not configured'
+        if os.environ.get('DUALTHEATER_SMOKE_DOWNLOAD') == '1':
+            window.download_mpv()
+            deadline = time.monotonic()+50
+            while window.downloading or window.busy:
+                if time.monotonic() > deadline:
+                    raise TimeoutError('Packaged mpv download/selection timed out')
+                root.update()
+                time.sleep(.02)
+            error = window.error_text.get()
+            assert not error or error.startswith('No Windows WASAPI devices found.'), error
+            assert window.mpv_path.get() == find_mpv(data_dir=directory)
+            # Headless CI can legitimately have no WASAPI endpoints.
+            download_check = 'passed'
         for resource in ('controller.html', 'select_audio.lua'):
             assert Path(__file__).with_name(resource).is_file(), resource
         runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/smoke-test', directory, ephemeral=True))
@@ -454,12 +492,19 @@ def smoke_test(path):
             assert (Path(directory)/'pairings.json').is_file()
         finally:
             runtime.close()
+        player_check = 'not configured'
+        if os.environ.get('DUALTHEATER_MPV'):
+            # Runs the external player from the frozen process, including its DLLs.
+            list_devices(os.environ['DUALTHEATER_MPV'],allow_empty=True)
+            player_check = 'passed'
         window.close()
         while not window.service.closed.wait(.05):
             root.update()
         root.destroy()
         Path(path).write_text(json.dumps({'version': VERSION, 'gui': 'passed', 'pages': 3,
                                         'resources': 'passed', 'host_start_stop': 'passed',
+                                        'external_player': player_check,
+                                        'download_select': download_check,
                                         'physical_playback': 'not tested'}), encoding='utf-8')
 
 

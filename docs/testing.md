@@ -4,6 +4,8 @@ This release is **experimental and still in testing**. Limited successful operat
 
 ## Software verification
 
+Downloader coverage includes verified nested extraction and DLL retention, offline reuse, checksum failures, cancellation, unsafe paths, wrong architecture, cache damage/recovery, manual selection and worker shutdown/error recovery. CI downloads the actual pinned upstream package and uses it for the optional real-mpv TrueHD/null-output tests. The frozen EXE also enumerates audio devices through that external runtime, without opening HDMI. These checks do not establish HDMI capability of that mpv build on a particular device.
+
 The desktop beta adds checks for private settings persistence/corruption recovery, friendly WASAPI device selection, partial bind rollback, full host shutdown and queued desktop transport against a simulated TV. A packaged-EXE smoke test opens the native GUI invisibly, verifies its embedded HTML/Lua resources, starts temporary local host services and closes them. It never loads a film or opens HDMI. Local visual checks cover the Connect, Player and Settings/help layouts and Windows icon. Android build/lint/JVM tests also check packaging after the icon/banner change; they do not establish how a specific TV launcher displays it.
 
 The development suite includes Python clock/servo tests, HTTP integrity and range tests, authenticated remote command/barrier tests, UDP discovery, remembered pairing and failure recovery. Optional Windows tests exercise real mpv with TrueHD packets and **null output**. Android JVM tests cover seek previews, request matching, time formatting, discovered-host validation and pairing-code handling.

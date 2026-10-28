@@ -16,19 +16,19 @@ Download the files using the links above, or run this in PowerShell:
 $downloadDir = Join-Path $env:USERPROFILE 'Downloads\DualTheater'
 New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
 Set-Location -LiteralPath $downloadDir
-$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.0-beta.1'
-$files = @('DualTheater-v0.4.0-beta.1.zip', 'DualTheater-TV-v0.4.0-beta.1-debug.apk', 'SHA256SUMS.txt')
+$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1'
+$files = @('DualTheater-v0.4.1-beta.1.zip', 'DualTheater-TV-v0.4.1-beta.1-debug.apk', 'SHA256SUMS.txt')
 foreach ($file in $files) {
     Invoke-WebRequest -Uri "$releaseUrl/$file" -OutFile $file
 }
-Get-FileHash .\DualTheater-v0.4.0-beta.1.zip, .\DualTheater-TV-v0.4.0-beta.1-debug.apk -Algorithm SHA256
+Get-FileHash .\DualTheater-v0.4.1-beta.1.zip, .\DualTheater-TV-v0.4.1-beta.1-debug.apk -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
 Compare each file's hash with its matching line in `SHA256SUMS.txt`. Then extract into a fresh folder and enter the directory containing `Start.cmd`:
 
 ```powershell
-Expand-Archive -LiteralPath .\DualTheater-v0.4.0-beta.1.zip -DestinationPath .\extracted
+Expand-Archive -LiteralPath .\DualTheater-v0.4.1-beta.1.zip -DestinationPath .\extracted
 Set-Location .\extracted\dualtheater
 ```
 
