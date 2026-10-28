@@ -183,6 +183,8 @@ class DesktopWindow:
         ttk.Label(page, text='Playback diagnostics', style='Heading.TLabel').pack(anchor='w')
         self.note(page, 'See timing quality, TV buffer health and recovery counts for this connection session. API estimates do not establish physical lip-sync, HDR or Atmos reception.')
         ttk.Label(page, textvariable=self.diagnostic_text, justify='left', wraplength=790).pack(anchor='w', pady=8)
+        self.phone_calibration_text = tk.StringVar(value='Phone calibration: no phone connected.')
+        ttk.Label(page, textvariable=self.phone_calibration_text, wraplength=790).pack(anchor='w', pady=4)
         self.export_button = ttk.Button(page, text='Export sanitized report…', command=self.export_diagnostics)
         self.export_button.pack(anchor='w', pady=6)
         self.note(page, 'Preview the report fields below; export saves the latest measurements. Reports exclude movie names, paths, network addresses, device identifiers, pairing data and raw logs. Counters reset when the Windows host restarts; drift statistics use the latest 600 accepted samples.')
@@ -447,6 +449,10 @@ class DesktopWindow:
         self.diagnostic_preview.delete('1.0', 'end')
         self.diagnostic_preview.insert('1.0', json.dumps(report, indent=2, allow_nan=False))
         self.diagnostic_preview.configure(state='disabled')
+        phone = value['phone_calibration']
+        self.phone_calibration_text.set('Phone calibration: ' + phone['state']
+            + (' · ' + phone['error'] if phone['error'] else '')
+            + (' · No phone connected' if not phone['phone_connected'] else ' · Phone connected'))
         self.audio_text.set('TrueHD bitstream reported by mpv. Confirm Atmos on your receiver.' if value.get('audio', {}).get('valid') else 'TrueHD output has not been confirmed for this session.')
         tracks = [t for t in value.get('audio_tracks', []) if t.get('type') == 'audio']
         key = json.dumps(tracks, sort_keys=True)
@@ -526,6 +532,10 @@ def smoke_test(path):
             download_check = 'passed'
         for resource in ('controller.html', 'select_audio.lua'):
             assert Path(__file__).with_name(resource).is_file(), resource
+        from .calibration import FIXTURE_SHA256
+        import hashlib
+        fixture = Path(__file__).resolve().parent.parent / 'calibration-phone-SDR-TrueHD.mkv'
+        assert hashlib.sha256(fixture.read_bytes()).hexdigest() == FIXTURE_SHA256
         runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/smoke-test', directory, ephemeral=True))
         try:
             runtime.start()

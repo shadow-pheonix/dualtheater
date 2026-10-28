@@ -25,6 +25,7 @@ from .sync import ClockFilter, VideoServo, parse_range
 from .pairing import PairingStore
 from .discovery import DiscoveryServer, DISCOVERY_PORT
 from .diagnostics import SessionDiagnostics
+from .calibration import CalibrationService
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -123,6 +124,7 @@ class Coordinator:
         self.last_correction = 0
         self.servo = VideoServo()
         self.diagnostics = SessionDiagnostics()
+        self.calibration = CalibrationService(self, ROOT / 'calibration-phone-SDR-TrueHD.mkv')
         self.recoveries = deque()
         self.op_lock = threading.RLock()
         self.stop = threading.Event()
@@ -158,6 +160,7 @@ class Coordinator:
                 'pair_token': self.pair_token, 'diagnostic': self.args.diagnostic,
                 'pair_code': self.pair_code, 'host_name': self.host_name,
                 'diagnostics': self.diagnostic_report(),
+                'phone_calibration': self.calibration.snapshot(),
                 'audio_tracks': self.mpv.get('track-list', []) if self.mpv and self.state not in ('loading', 'seeking') else []}
 
     def diagnostic_report(self):
@@ -338,8 +341,14 @@ class Coordinator:
                     if playing:
                         self.start(prepared=True)
                 elif action == 'offset':
-                    self.offset_ms = finite(body['milliseconds'], -2000, 2000)
-                    self.offset_file.write_text(json.dumps({'video_lead_ms': self.offset_ms}), encoding='utf-8')
+                    value = finite(body['milliseconds'], -2000, 2000)
+                    temporary = self.offset_file.with_suffix('.tmp')
+                    try:
+                        temporary.write_text(json.dumps({'video_lead_ms': value}), encoding='utf-8')
+                        os.replace(temporary, self.offset_file)
+                    finally:
+                        temporary.unlink(missing_ok=True)
+                    self.offset_ms = value
                     self.servo.reset()
                     self.log(f'Video lead set to {self.offset_ms:.1f} ms')
                 elif action == 'track':
@@ -535,6 +544,7 @@ class Coordinator:
     def close(self):
         self.stop.set()
         self.cancel.set()
+        self.calibration.close()
         with self.op_lock:
             if self.peer:
                 self.peer.close()
@@ -550,7 +560,12 @@ class ControlHandler(socketserver.StreamRequestHandler):
         self.request.settimeout(5)
         peer = None
         try:
-            hello = json.loads(self.rfile.readline(65537))
+            raw_hello = self.rfile.readline(65537)
+            if len(raw_hello) > 65536:
+                return
+            hello = json.loads(raw_hello)
+            if not isinstance(hello, dict):
+                return
             if hello.get('op') != 'hello' or hello.get('version') != 1:
                 return
             try:
@@ -558,6 +573,11 @@ class ControlHandler(socketserver.StreamRequestHandler):
                     hello.get('device', 'Android TV'), app.pair_token, app.pair_code, self.client_address[0])
             except (ValueError, OSError) as e:
                 self.wfile.write((json.dumps({'op': 'auth_required', 'error': str(e)}) + '\n').encode())
+                return
+            if hello.get('role') == 'calibration':
+                self.handle_calibration(trusted_token)
+                return
+            if hello.get('role') not in (None, 'tv'):
                 return
             if app.peer and not app.peer.closed:
                 self.wfile.write(b'{"error":"A TV is already connected"}\n')
@@ -597,6 +617,53 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 peer.close()
                 app.diagnostics.disconnected()
                 app.log('TV disconnected')
+
+    def handle_calibration(self, trusted_token):
+        app = self.server.app
+        phone = Peer(self.request, self.rfile)
+        last_id = 0
+        try:
+            app.calibration.attach(phone)
+            phone.send({'op': 'welcome', 'version': 1, 'role': 'calibration', 'calibration_protocol': 1,
+                        'host_id': app.pairings.host_id, 'host_name': app.host_name,
+                        'trusted_token': trusted_token, 'calibration': app.calibration.snapshot()})
+            while not app.stop.is_set():
+                raw = self.rfile.readline(65537)
+                if not raw or len(raw) > 65536:
+                    break
+                msg = json.loads(raw)
+                if not isinstance(msg, dict):
+                    raise ValueError('Invalid calibration message')
+                request_id = msg.get('id')
+                if type(request_id) is not int or request_id <= last_id:
+                    raise ValueError('Invalid calibration request sequence')
+                last_id = request_id
+                error = ''
+                try:
+                    if msg.get('op') != 'calibration':
+                        raise ValueError('Unsupported phone operation')
+                    action = msg.get('action')
+                    if action == 'start':
+                        app.calibration.start(phone)
+                    elif action == 'complete':
+                        app.calibration.complete(phone, msg.get('run_id'), msg.get('pairs'))
+                    elif action == 'apply':
+                        app.calibration.apply(phone, msg.get('run_id'))
+                    elif action == 'cancel':
+                        app.calibration.cancel(phone)
+                    elif action != 'status':
+                        raise ValueError('Unsupported calibration action')
+                except (ValueError, RuntimeError) as problem:
+                    error = str(problem)
+                except OSError:
+                    error = 'Could not save calibration; check the Windows app and retry'
+                phone.send({'reply': request_id, 'ok': not bool(error), 'error': error,
+                            'calibration': app.calibration.snapshot()})
+        except (OSError, ValueError, TypeError):
+            pass
+        finally:
+            app.calibration.detach(phone)
+            phone.close()
 
 
 class ThreadServer(socketserver.ThreadingTCPServer):

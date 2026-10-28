@@ -42,6 +42,8 @@ The development TV scopes its playback epoch to an accepted control connection. 
 
 ## Connection
 
+The `0.5.0-beta.2` preview accepts `hello` with `role: calibration` for a separately paired phone. This role does not replace `Coordinator.peer` and cannot submit arbitrary media paths or mpv commands. Its bounded, sequenced requests expose status/start/complete/apply/cancel. `host/calibration.py` owns one phone connection and one run at a time. A background run worker uses the existing coordinator lock/actions to load the pinned reference, prepare, play and pause while the TV reader continues receiving ACKs. Results are validated and only explicitly applied against the same TV/media/epoch/previous offset. The phone sends numerical measurements only. Disconnect/shutdown cancels owned work; unrelated replacement playback is not stopped. See [phone capture and protocol behavior](phone-calibration.md).
+
 UDP discovery advertises a laptop name, stable ID and control port, with a matching random probe nonce. Codes and credentials are not advertised. First-time six-digit pairing issues a long remembered per-TV credential. Legacy manual session tokens remain supported. See [connection setup](easy-connection.md).
 
 The accepted control socket's local interface supplies media URLs, which helps avoid accidental VPN address advertisement. The browser controller accepts only local Host/Origin values and a session token. Media endpoints expose only the selected file.

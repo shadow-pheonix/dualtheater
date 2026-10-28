@@ -1,6 +1,6 @@
 # Playback diagnostics — unreleased development branch
 
-These features belong to `feature/playback-reliability`, version `0.5.0-beta.1`. The public `0.4.1-beta.1` EXE/APK do not contain them. The base build and release assets remain unchanged. Use the [source build instructions](../README.md#build-and-test) to create separate development builds. No TV is required to run the host tests or export an empty session report.
+These features belong to `feature/playback-reliability`, version `0.5.0-beta.2`. The public `0.4.1-beta.1` EXE/APK do not contain them. The base build and release assets remain unchanged. Use the [source build instructions](../README.md#build-and-test) to create separate development builds. No TV is required to run the host tests or export an empty session report.
 
 ## Native Windows app
 

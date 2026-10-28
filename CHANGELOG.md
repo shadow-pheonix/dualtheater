@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0-beta.2 — unreleased phone calibration v1
+
+- Separate Android phone calibration preview `0.1.0-beta.1`, LAN discovery/pairing and foreground Camera2/AudioRecord capture without a separate physical reference fixture.
+- Comparable capture-clock timestamps, tone/sample detection, exposure/rolling-shutter onset intervals and complete irregular six-cue matching.
+- Original 22-second SDR/stereo TrueHD reference, source cue timing verification and checksum-pinned host playback through the existing coordinator.
+- Numerical results, repeat spread/capture-resolution estimates and explicit saved-offset Apply. Raw images/audio stay in memory. No validated absolute-accuracy claim.
+- Cancellation/disconnect pause handling, stale-result checks and atomic offset saves. New phone build script and APK packaging in CI. Base apps/releases remain unchanged.
+
 ## 0.5.0-beta.1 — unreleased feature branch
 
 - Additional Diagnostics page and local-browser JSON export with an explicit field allowlist that excludes personal media, network, device and pairing data.

@@ -6,7 +6,7 @@
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
-**Unreleased development branch:** `feature/playback-reliability` builds version `0.5.0-beta.1` with playback diagnostics, sanitized report export and a TV host-restart fix. These features are not in the downloadable `0.4.1-beta.1` builds below. The base build and published assets are preserved. See [branch diagnostics instructions](docs/diagnostics.md).
+**Unreleased development branch:** `feature/playback-reliability` builds Windows/TV version `0.5.0-beta.2` with diagnostics, sanitized report export, restart protection and the first **DualTheater Calibration Preview** phone client (`0.1.0-beta.1`). The phone uses flash/beep capture timestamps without requiring a separate physical reference fixture. These features are not in the downloadable `0.4.1-beta.1` builds below. The base build and published assets are preserved. See [phone calibration setup](docs/phone-calibration.md) and [diagnostics instructions](docs/diagnostics.md).
 
 ## Download
 
@@ -93,7 +93,7 @@ Keep the Windows app open throughout playback. Check the TV's active HDR indicat
 
 ## Operating the player
 
-The instructions in this section describe the published `0.4.1-beta.1` build. When running this development branch, an additional **Diagnostics** page provides playback metrics and **Export sanitized report…**; see the [development feature guide](docs/diagnostics.md). After a TV reconnect, continue to reload the movie before playback.
+The instructions in this section describe the published `0.4.1-beta.1` build. The development branch adds a **Diagnostics** page and **Export sanitized report…**; see the [feature guide](docs/diagnostics.md). Its separate paired phone client can start a reference test and suggest a saved lip-sync correction; follow [phone calibration instructions](docs/phone-calibration.md). After a TV reconnect or calibration test, reload the movie before playback.
 
 | Task | In the Windows app |
 | --- | --- |
@@ -113,7 +113,7 @@ All transport controls use the existing shared Windows/TV synchronization barrie
 
 Desktop settings, remembered TV credentials, calibration and logs are stored under **`%LOCALAPPDATA%\DualTheater`**, not inside the EXE or its temporary extraction folder. Use **Settings & help → Open local settings folder** to find them. Preserve these files privately when updating; do not publish them. Moving/replacing the EXE does not reset them. Downloaded mpv and its supporting DLLs are stored in the `players` subfolder and reused offline. **Settings & help → mpv download / source** opens the exact upstream release; use **Browse…** if you want another build. There is no silent player update. The older source launcher uses its own source-folder state, so the first switch to the EXE may require pairing and calibrating again; the old files are left intact.
 
-The optional source ZIP includes `calibration-SDR-TrueHD-no-Atmos.mkv`, an original flash/beep clip. Extract the ZIP and choose that file in **Player** for a basic timing check. It is **SDR with stereo TrueHD, not HDR/Atmos**. Verify the offset again with your movie and processing modes. A dedicated TV calibration screen and automatic camera/microphone calibration are not implemented.
+The optional source ZIP includes `calibration-SDR-TrueHD-no-Atmos.mkv`, an original flash/beep clip. Extract the ZIP and choose that file in **Player** for a basic timing check. It is **SDR with stereo TrueHD, not HDR/Atmos**. Verify the offset again with your movie and processing modes. These automatic features are absent from published 0.4.1 builds. The development branch has a separate [phone calibration client](docs/phone-calibration.md); a dedicated TV calibration screen is not included.
 
 The APK is development-signed. If Android reports a signing-certificate mismatch, uninstall the previous TV app before installing the new APK and pair again. CI debug signing keys are not retained or published. Use a matching host/APK release; do not run multiple hosts against the default ports.
 
@@ -163,7 +163,7 @@ The current target is an ordinary single-timeline MKV. Subtitles, playlists, vid
 
 For ongoing development or a new Codex session, start with [project context](docs/context.md) and follow [AGENTS.md](AGENTS.md). Updating the shared context after meaningful changes and before handoffs is mandatory. Whenever a project change makes installation or operating instructions outdated, update the affected README instructions in that same change before publishing.
 
-This feature branch builds a separate `0.5.0-beta.1` candidate. Its **DualTheater Preview** desktop uses `%LOCALAPPDATA%\DualTheater-Preview` for settings, pairing, calibration, logs and managed players, leaving the base desktop's profile intact. **DualTheater TV Preview** uses a separate Android package (`dev.dualtheater.tv.preview`) and can be installed alongside the base TV app without replacing its settings. Keep build outputs separate from the base EXE/APK and use a matching branch-built host/TV app together. Only run one host at a time. The candidate has not been published or physically validated.
+This feature branch builds a separate `0.5.0-beta.2` candidate. Its **DualTheater Preview** desktop uses `%LOCALAPPDATA%\DualTheater-Preview` for settings, pairing, calibration, logs and managed players, leaving the base desktop's profile intact. **DualTheater TV Preview** uses a separate Android package (`dev.dualtheater.tv.preview`) and can be installed alongside the base TV app without replacing its settings. Keep build outputs separate from the base EXE/APK and use a matching branch-built host/TV app together. Only run one host at a time. The candidate has not been published or physically validated.
 
 To build the Windows EXE from source on Windows with Python 3.11 x64:
 
