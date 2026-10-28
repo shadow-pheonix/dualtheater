@@ -8,7 +8,7 @@ DualTheater plays the **video on an Android TV or Google TV** using its native h
 
 ## Download
 
-**Desktop beta: v0.4.0-beta.1 — experimental, still in testing.** The links below refer to this version; release assets become available after the build-and-release workflow succeeds. Use the matching Windows and TV versions.
+**Current downloadable version: v0.4.0-beta.1 — experimental, still in testing.** The Windows EXE and TV APK are published and verified. Use the matching Windows and TV versions.
 
 | Download | What to do with it |
 | --- | --- |

@@ -129,4 +129,3 @@ You can load the included `calibration-SDR-TrueHD-no-Atmos.mkv` using its full e
 - **No sound, noise or rejected audio:** verify the selected HDMI endpoint/input and cable, close competing exclusive-audio apps and test standalone mpv. Choose an actual TrueHD track; do not use PCM diagnostic mode as evidence of Atmos.
 - **Buffering or repeated resynchronization:** check network throughput and the host's error/status messages. A 100 Mbps TV Ethernet port may be slower than remux peaks. See the [hardware test guide](hardware-test.md).
 - **Installing a later beta:** use a matching host/APK pair, preserve the Windows `pairings.json` and `calibration.json` locally, and follow that release's instructions. A TV signing-certificate change may require uninstall/re-pairing.
-

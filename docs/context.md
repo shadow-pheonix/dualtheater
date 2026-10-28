@@ -12,16 +12,18 @@ The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDM
 
 ## Current public state
 
-### In progress on main: desktop beta 0.4.0-beta.1
+### Published desktop beta 0.4.0-beta.1
 
-A native Windows GUI and one-file EXE have been built locally with Connect, Player and Settings/help navigation. Python/Tk are bundled; the user selects an existing working mpv executable once. Saved setup, pairing and calibration use the private local application-data directory, separate from one-file extraction. The GUI calls the existing coordinator/barrier, not a separate playback implementation. Matching original dual-screen icons and a TV banner are included. Android version code is 6. These changes are not a published build until the new release is verified.
+A native Windows GUI and one-file EXE are published with Connect, Player and Settings/help navigation. Python/Tk are bundled; the user selects an existing working mpv executable once. Saved setup, pairing and calibration use the private local application-data directory, separate from one-file extraction. The GUI calls the existing coordinator/barrier, not a separate playback implementation. Matching original dual-screen icons and a TV banner are included. Android version code is 6.
 
 Local desktop-beta checks: all 35 Python tests passed, including eight new desktop/settings/lifecycle tests and the four optional real-mpv null-output tests. The final packaged EXE passed GUI/resource/local-host smoke checks without HDMI playback; its icon group, version metadata, embedded licenses and relative module code paths were inspected. Android debug build, all 10 JVM tests, lint and APK signature verification passed. Native Connect/Player/Settings layouts were visually reviewed; a crowded pre-connection message was shortened. The documentation link/command/privacy scan passed and locked v0.1.1 checksums remain unchanged. These checks do not establish physical HDR/Atmos or lip-sync behavior in the desktop build.
 
+[GitHub release validation and publication](https://github.com/shadow-pheonix/dualtheater/actions/runs/40657137234) succeeded. All four public assets were downloaded and their GitHub SHA-256 digests and checksum manifest verified. The 64-file source archive passed privacy/integrity checks. The downloaded Windows EXE independently passed its GUI/resource/host smoke test, and its windowed subsystem, version and icon resources were inspected. The downloaded APK signature verifies. Physical playback through this desktop build remains untested.
+
 - Repository: [shadow-pheonix/dualtheater](https://github.com/shadow-pheonix/dualtheater), public, default branch `main`.
-- Published version: [v0.3.0-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.3.0-beta.1), explicitly a prerelease. Android version code is 5.
-- Downloads: development-signed TV APK, matching Windows host/source ZIP and SHA-256 checksums. Python and mpv are installed separately.
-- The README has direct release downloads plus installation/launch commands, TV sideloading and pairing, and operating/recovery instructions. There is no standalone Windows EXE/installer. `AGENTS.md` mandates updating affected README instructions in the same change whenever project behavior makes them outdated.
+- Published version: [v0.4.0-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.4.0-beta.1), explicitly a prerelease. Android version code is 6. Earlier releases remain available.
+- Downloads: portable Windows x64 EXE, development-signed TV APK, optional source/CLI ZIP and SHA-256 checksums. Python/Tk are included in the EXE; mpv is selected separately. Source users still install Python.
+- The README has direct downloads, native setup/navigation and operating/recovery instructions. No Windows installer is required; the EXE is portable. Optional source commands/ADB instructions are in `docs/command-line.md`. `AGENTS.md` mandates updating affected README instructions in the same change whenever project behavior makes them outdated.
 - `main` can include documentation changes after the release. Existing release assets are immutable under the current workflow; a new application release requires a new beta version.
 - Public documentation and app positioning are brand-independent. Compatibility depends on the actual TV, firmware, format and HDMI endpoint.
 - The Windows laptop or desktop PC requires HDMI output, or a display/audio-capable USB-C (Type-C) port with a compatible HDMI adapter. Charging/data-only USB-C ports are insufficient. The adapter/driver must support TrueHD passthrough; adapter-based playback remains unverified in this project.
@@ -43,7 +45,7 @@ Do not change TrueHD packet timing through resampling or audio speed correction.
 - Middle/OK: coordinated play/pause. A seek while paused stays paused. OK during a preview commits the position and toggles the final play state.
 - Bottom timeline: elapsed/total time and buffered progress; shows while paused, buffering or synchronizing, and hides after five seconds of playback. Up/down show it; Back cancels a seek preview.
 - UDP laptop discovery, six-digit first-time pairing and saved per-TV credentials support reconnection without repeatedly entering network numbers. Advanced/manual connection remains available.
-- Browser control is local to the Windows machine. Default ports: browser TCP 8764, media TCP 8765, control TCP 8766 and discovery UDP 8767.
+- Native Windows control is the default; the optional browser controller is Windows-local. Default ports: browser TCP 8764, media TCP 8765, control TCP 8766 and discovery UDP 8767. Run only one host against these ports.
 - Pairing/control/media are cleartext for a trusted home LAN. Do not expose the ports publicly. Reconnecting currently requires reloading media on Windows; automatic playback restoration is not validated.
 
 ## Verification: distinguish evidence from expectations
@@ -99,7 +101,7 @@ See [testing status](testing.md) and [hardware acceptance steps](hardware-test.m
 | `tests/`, Android `app/src/test/` | Host/protocol/integration and Android JVM tests |
 | `.github/workflows/beta.yml` | Windows CI tests, Android build/lint, packaging and prerelease creation |
 
-The host uses Python 3.10+ and the standard library. Android currently pins Media3 1.9.0, AGP 8.13.2 and Gradle 8.13; use JDK 17/21, SDK Platform 36 and Build Tools 36.1.0. Recheck build files before changing dependencies.
+The source host uses Python 3.10+ and the standard library/Tkinter. Windows packaging uses Python 3.11 x64 and pinned build tools in `requirements-build.txt`; the published EXE requires no Python installation. Android currently pins Media3 1.9.0, AGP 8.13.2 and Gradle 8.13; use JDK 17/21, SDK Platform 36 and Build Tools 36.1.0. Recheck build files before changing dependencies.
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -125,4 +127,4 @@ No current hardware validation results should be invented to close these items. 
 - 2026-10-27: Published the shared context and mandatory agent handoff rules. Clarified existing-hardware purpose and explicit Windows laptop/desktop HDMI or display-capable USB-C requirements; adapter TrueHD remains untested.
 - 2026-10-27: Added prominent direct beta APK/Windows ZIP/checksum links and documented download/extraction, prerequisites, optional ADB sideloading, host commands, pairing, movie loading, remote/browser operation, track changes, manual sync, reconnection and shutdown. Distinguished released functionality from proposed automatic calibration; no Windows installer or automatic calibration is claimed.
 - 2026-10-28: Finished the README guide and mandatory same-change instruction updates after an interrupted publishing attempt. Documentation verification checks all nine PowerShell blocks, 17 relative links/anchors, launcher/host flags, UI labels, release-runtime consistency, content/privacy and Git whitespace. No commands were executed against playback hardware and no new hardware tests were performed for these edits.
-- 2026-10-28: Built the portable desktop and matching Windows/Android icons for beta 0.4.0-beta.1. Added shared runtime lifecycle/rollback, private desktop storage, friendly endpoint selection, native movie/seek/track controls, reconnect reload gating and coordinated close. Updated README operating instructions, optional CLI guide and release CI. Local software/packaging checks passed as recorded above; publication and real-device validation are separate remaining steps.
+- 2026-10-28: Published and independently verified the portable desktop and matching Windows/Android icons for beta 0.4.0-beta.1. Added shared lifecycle/rollback, private desktop storage, friendly endpoint selection, native movie/seek/track controls, reconnect reload gating and coordinated close. Updated README operating instructions, optional CLI guide and CI. Local and GitHub software/packaging checks passed as recorded above. Real-device desktop HDR/Atmos/lip-sync validation is the remaining acceptance work.
