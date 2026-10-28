@@ -8,6 +8,10 @@ The same local file is read by mpv on Windows for compressed TrueHD output throu
 
 The native Tk desktop (`host/desktop.py`) and optional CLI share `Coordinator` and `HostRuntime` in `host/server.py`. The desktop sends slow operations to a background worker and polls status separately, keeping file selection/navigation responsive while the existing transport barrier waits for readiness. It adds no alternative timing engine and does not change mpv passthrough flags or the video servo.
 
+On the unreleased playback-reliability branch, `host/diagnostics.py` keeps bounded timing samples and fixed session counters. Reports copy only explicitly approved numerical/boolean/enum fields, without raw snapshots or mpv IPC. The desktop worker saves reports atomically; the existing localhost controller exposes the same report under its token/Host/Origin restrictions. Android supplies observed transfer rate and reported frame-drop counts. See [diagnostic semantics and privacy](diagnostics.md).
+
+The development desktop uses a separate `DualTheater-Preview` private profile and taskbar identity. It retains the shared single-instance mutex and default service ports, so it must not run alongside the base host. The candidate TV APK uses `dev.dualtheater.tv.preview` with the existing Java namespace, allowing it to coexist with the base TV app without replacing its private preferences.
+
 `HostRuntime` binds the required services, rolls back partial startup failures and closes owned resources on shutdown. Desktop setup and media controls remain local Python calls; they are not new unauthenticated network endpoints. The optional browser controller retains its existing localhost/token restrictions.
 
 The portable EXE bundles Python, Tk, HTML/Lua resources, app artwork and upstream license notices through PyInstaller. Runtime resources follow `__file__` inside the bundle; writable state is explicitly separate under `%LOCALAPPDATA%\DualTheater`. The CLI still defaults to its source folder and optionally accepts `--data-dir`. Desktop mpv/endpoint preferences are in `settings.local.json`; unreadable settings are preserved before explicit replacement. The desktop does not import old credentials automatically or overwrite a different application's settings. mpv remains a separate process. The user-initiated downloader in `host/player_download.py` fetches a pinned official x64 ZIP directly from upstream over HTTPS, verifies its size/SHA-256, validates/extracts the nested ZIP and probes the executable without audio. It keeps all runtime DLLs adjacent. Installation is staged under private app data and renamed into place only after validation; incomplete downloads do not replace an existing player. A file-hash receipt validates the managed cache before automatic reuse. Manual mpv selection remains supported. See [player setup](player-download.md).
@@ -33,6 +37,8 @@ The timing model does not measure actual panel or acoustic latency. The TV may n
 Paused audio-only `time-pos` may include residual output-buffer delay, so it is not used as proof that the requested seek anchor was reached. Buffering and sustained large drift can trigger a barrier; repeated failures pause with an error.
 
 TV remote work is queued to a separate operation worker. The socket reader continues receiving the acknowledgements that worker needs, avoiding a reader-thread deadlock. Request IDs and epochs reject duplicate or stale input. Repeated direction events form one preview before committing a seek.
+
+The development TV scopes its playback epoch to an accepted control connection. Connection reset clears old media and advances a separate callback generation, so a restarted host can reuse lower epoch numbers without making old scheduled callbacks valid. Within a connection, epoch monotonicity is preserved. Frame-listener replacement also retains its independent callback generation.
 
 ## Connection
 

@@ -2,7 +2,13 @@
 
 DualTheater separates local playback across an Android TV/Google TV and a Windows HDMI audio path: native TV hardware video decoding, original TrueHD Atmos packets through mpv, and coordinated controls/timing over the home network.
 
-This prerelease adds **Download mpv** on Connect: download directly from the official upstream release, verify its pinned checksum, extract the runtime/DLLs and select it automatically. Later launches reuse it offline; Browse remains available for your own build. It retains the **portable Windows x64 EXE** with Connect, Player and Settings/help pages, friendly audio-device selection, a native movie picker, timeline/seek controls and saved setup. Python/Tk are included; no installer or terminal is required. Matching original Windows/Android icons and a branded TV launcher banner are included. The existing discovery, one-time pairing, TV remote controls and audio-led synchronization remain shared with the command-line host.
+This candidate adds a **Diagnostics** page with bounded drift statistics, TV buffer/transfer/frame-drop measurements and operation/recovery/failure counters. **Export sanitized report…** saves an allowlisted JSON summary without movie names, paths, addresses, device identifiers, pairing data or raw logs. The optional localhost browser controller offers the same export. Missing or stale telemetry is identified explicitly. [Report meaning and privacy](https://github.com/shadow-pheonix/dualtheater/blob/feature/playback-reliability/docs/diagnostics.md).
+
+The TV resets playback epochs per accepted connection and invalidates earlier callbacks, allowing a restarted Windows host to use lower epochs. Reconnect and reload the movie before resuming; automatic position restoration is not included. This development branch is separate from the preserved 0.4.1 base build and is not yet published.
+
+The candidate desktop is **DualTheater Preview**, with a separate `%LOCALAPPDATA%\DualTheater-Preview` profile. **DualTheater TV Preview** uses `dev.dualtheater.tv.preview`, so it can coexist with the base TV app without replacing its settings. Use the matching preview apps together and run only one Windows host at a time.
+
+The portable Windows x64 EXE retains Connect, Player and Settings/help, friendly audio-device selection, a native movie picker, timeline/seek controls, saved setup and explicit checksum-verified mpv download. Python/Tk are included; no installer or terminal is required. Original-file streaming, strict TrueHD passthrough and the shared audio-led synchronization barrier are retained.
 
 **Not a stable release.** Physical lip-sync, long-session reliability, broader device coverage and newer connection/remote features still need real-device testing. API timing values and null-output tests do not prove acoustic sync or correct HDR/Atmos reception.
 

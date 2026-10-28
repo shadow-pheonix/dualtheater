@@ -16,6 +16,7 @@ from .desktop_support import (DesktopService, Settings, VERSION, default_data_di
                               find_mpv, format_time, list_devices, runtime_args)
 from .server import HostRuntime
 from .player_download import DOWNLOAD_PAGE
+from .diagnostics import save_report
 
 
 class DesktopWindow:
@@ -45,7 +46,9 @@ class DesktopWindow:
         self.offset = tk.StringVar(value='0')
         self.seek_seconds = tk.StringVar(value='0')
         self.audio_text = tk.StringVar(value='No movie loaded.')
-        self.root.title(f'DualTheater {VERSION} — Experimental beta')
+        self.diagnostic_text = tk.StringVar(value='Start the TV connection to collect session diagnostics.')
+        self.export_notice = tk.StringVar()
+        self.root.title(f'DualTheater Preview {VERSION} — Experimental beta')
         self.root.geometry('930x700')
         self.root.minsize(800, 610)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
@@ -73,11 +76,14 @@ class DesktopWindow:
         self.tabs.pack(fill='both', expand=True)
         self.connect = ttk.Frame(self.tabs, padding=18)
         self.player = ttk.Frame(self.tabs, padding=18)
+        self.diagnostics_page = ttk.Frame(self.tabs, padding=18)
         self.options = ttk.Frame(self.tabs, padding=18)
-        for frame, title in ((self.connect, '1  Connect'), (self.player, '2  Player'), (self.options, 'Settings & help')):
+        for frame, title in ((self.connect, '1  Connect'), (self.player, '2  Player'),
+                             (self.diagnostics_page, 'Diagnostics'), (self.options, 'Settings & help')):
             self.tabs.add(frame, text=title)
         self._connect_page()
         self._player_page()
+        self._diagnostics_page()
         self._settings_page()
         ttk.Label(outer, textvariable=self.error_text, foreground='#a82020', wraplength=850).pack(anchor='w', pady=(10, 0))
         self.activity = ttk.Progressbar(outer, mode='indeterminate')
@@ -171,6 +177,25 @@ class DesktopWindow:
         self.track_button.pack(side='left')
         ttk.Label(self.player, textvariable=self.audio_text, wraplength=790).pack(anchor='w', pady=8)
         self.note(self.player, 'TV remote: OK plays/pauses; left/right seeks. All transport controls use the same Windows synchronization barrier.')
+
+    def _diagnostics_page(self):
+        page = self.diagnostics_page
+        ttk.Label(page, text='Playback diagnostics', style='Heading.TLabel').pack(anchor='w')
+        self.note(page, 'See timing quality, TV buffer health and recovery counts for this connection session. API estimates do not establish physical lip-sync, HDR or Atmos reception.')
+        ttk.Label(page, textvariable=self.diagnostic_text, justify='left', wraplength=790).pack(anchor='w', pady=8)
+        self.export_button = ttk.Button(page, text='Export sanitized report…', command=self.export_diagnostics)
+        self.export_button.pack(anchor='w', pady=6)
+        self.note(page, 'Preview the report fields below; export saves the latest measurements. Reports exclude movie names, paths, network addresses, device identifiers, pairing data and raw logs. Counters reset when the Windows host restarts; drift statistics use the latest 600 accepted samples.')
+        ttk.Label(page, textvariable=self.export_notice, foreground='#245e39').pack(anchor='w')
+        self.diagnostic_preview = tk.Text(page, height=12, wrap='word', state='disabled', font=('Consolas', 9))
+        self.diagnostic_preview.pack(fill='both', expand=True, pady=6)
+
+    def export_diagnostics(self):
+        path = filedialog.asksaveasfilename(parent=self.root, title='Export sanitized diagnostic report',
+            defaultextension='.json', initialfile='DualTheater-diagnostics.json', filetypes=[('JSON report', '*.json')])
+        if path:
+            self.export_notice.set('')
+            self._queue('export_diagnostics', path=path)
 
     def _settings_page(self):
         ttk.Label(self.options, text='Lip-sync adjustment', style='Heading.TLabel').pack(anchor='w')
@@ -350,6 +375,9 @@ class DesktopWindow:
                     self.running = True
                     self.offset_loaded = False
                     self.require_reload = True
+                    self.export_notice.set('')
+                elif kind == 'diagnostics_exported':
+                    self.export_notice.set('Sanitized report saved.')
                 elif kind == 'stopped':
                     self.running = False
                     self.status = {}
@@ -365,6 +393,7 @@ class DesktopWindow:
                     self.audio_text.set('No movie loaded.')
                     self.timeline.set(0)
                     self.time_text.set('0:00 / 0:00')
+                    self.diagnostic_text.set('Session stopped. Start the TV connection to collect new diagnostics.')
                 elif kind == 'status' and self.running:
                     self._status(value)
                 elif kind == 'action_done':
@@ -404,6 +433,20 @@ class DesktopWindow:
             self.offset_loaded = True
         drift, rtt = value['drift_ms'], value['clock_rtt_ms']
         self.timing.configure(text=f"Estimated drift: {'—' if drift is None else f'{drift:.1f} ms'} · Clock RTT: {'—' if rtt is None else f'{rtt:.1f} ms'}")
+        report = value['diagnostics']
+        telemetry, timing = report['telemetry'], report['timing']
+        def metric(value, suffix=''):
+            return '—' if value is None else f'{value:.1f}{suffix}'
+        buffer_ms = telemetry['buffer_ahead_ms']
+        self.diagnostic_text.set(
+            f"TV telemetry: {telemetry['status']} · Buffer ahead: {metric(buffer_ms / 1000 if buffer_ms is not None else None, ' s')}\n"
+            f"Last measured transfer: {metric(telemetry['transfer_mbps'], ' Mbps')} · Sample age: {metric(telemetry['transfer_age_ms'] / 1000 if telemetry['transfer_age_ms'] is not None else None, ' s')} · Dropped frames: {metric(telemetry['dropped_video_frames'])}\n"
+            f"Drift |p95|: {metric(timing['p95_absolute_drift_ms'], ' ms')} · Timing sample age: {metric(timing['last_sample_age_ms'], ' ms')}\n"
+            f"Buffer recoveries: {report['recoveries']['buffering']} · Drift recoveries: {report['recoveries']['drift']} · Errors: {report['errors']} · Disconnects: {report['disconnects']}")
+        self.diagnostic_preview.configure(state='normal')
+        self.diagnostic_preview.delete('1.0', 'end')
+        self.diagnostic_preview.insert('1.0', json.dumps(report, indent=2, allow_nan=False))
+        self.diagnostic_preview.configure(state='disabled')
         self.audio_text.set('TrueHD bitstream reported by mpv. Confirm Atmos on your receiver.' if value.get('audio', {}).get('valid') else 'TrueHD output has not been confirmed for this session.')
         tracks = [t for t in value.get('audio_tracks', []) if t.get('type') == 'audio']
         key = json.dumps(tracks, sort_keys=True)
@@ -446,6 +489,7 @@ class DesktopWindow:
         self.pause_button.configure(state='normal' if self.running and self.status.get('file') and not self.closing else 'disabled')
         self.offset_button.configure(state='normal' if idle and self.running else 'disabled')
         self.browser_button.configure(state='normal' if self.running else 'disabled')
+        self.export_button.configure(state='normal' if idle and self.running else 'disabled')
 
     def close(self):
         if self.closing:
@@ -465,7 +509,7 @@ def smoke_test(path):
         root.withdraw()
         window = DesktopWindow(root, directory, auto_start=False)
         root.update()
-        assert len(window.tabs.tabs()) == 3
+        assert len(window.tabs.tabs()) == 4
         download_check = 'not configured'
         if os.environ.get('DUALTHEATER_SMOKE_DOWNLOAD') == '1':
             window.download_mpv()
@@ -492,6 +536,13 @@ def smoke_test(path):
             assert response.status == 200
             assert b'DualTheater' in response.read()
             connection.close()
+            # Exercise the new diagnostics widgets using the real local runtime.
+            window._status(runtime.app.snapshot())
+            assert 'schema_version' in window.diagnostic_preview.get('1.0', 'end')
+            report_path = Path(directory) / 'diagnostics.json'
+            save_report(report_path, runtime.app.diagnostic_report())
+            assert json.loads(report_path.read_text())['schema_version'] == 1
+            assert runtime.app.ui_token not in report_path.read_text()
             assert (Path(directory)/'pairings.json').is_file()
         finally:
             runtime.close()
@@ -504,10 +555,11 @@ def smoke_test(path):
         while not window.service.closed.wait(.05):
             root.update()
         root.destroy()
-        Path(path).write_text(json.dumps({'version': VERSION, 'gui': 'passed', 'pages': 3,
+        Path(path).write_text(json.dumps({'version': VERSION, 'gui': 'passed', 'pages': 4,
                                         'resources': 'passed', 'host_start_stop': 'passed',
                                         'external_player': player_check,
                                         'download_select': download_check,
+                                        'diagnostics': 'passed',
                                         'physical_playback': 'not tested'}), encoding='utf-8')
 
 
@@ -521,7 +573,7 @@ def main():
     mutex = None
     try:
         if os.name == 'nt':
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('DualTheater.Desktop.Beta')
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('DualTheater.Desktop.Preview')
             from ctypes import wintypes
             kernel = ctypes.WinDLL('kernel32', use_last_error=True)
             kernel.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]

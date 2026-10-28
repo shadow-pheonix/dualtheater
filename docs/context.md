@@ -29,6 +29,14 @@ Local checks: all 46 Python tests passed with the actual upstream-downloaded run
 - `main` can include documentation changes after the release. Existing release assets are immutable under the workflow; application changes need a new beta version.
 - Compatibility depends on actual TV, firmware, format and HDMI endpoint. The laptop/desktop needs HDMI output, or a display/audio-capable USB-C port with a compatible HDMI adapter. Data/charging-only USB-C is insufficient. Adapter TrueHD remains unverified.
 
+## Active feature branch (unreleased)
+
+- User requested development on `feature/playback-reliability` while the TV is unavailable because of a power outage. Local `main` remains at `7debf90`; preserve the published/base build. Do not merge or publish this work as part of feature development.
+- The selected feature is playback diagnostics and sanitized export. Branch builds use `0.5.0-beta.1` (Android version code 8); the public download remains `0.4.1-beta.1`.
+- Implemented in the branch: a native Diagnostics page and browser report export, bounded timing statistics, operation/failure/recovery/disconnect counters, buffer/transfer/frame-drop telemetry, and an explicit report field allowlist. Playback epochs now reset per authenticated TV connection, with callback-generation invalidation across restarts. The host pauses if a replacement TV session reports a different playback epoch, preventing old audio from continuing through a fast reconnect. The original-media and audio/barrier invariants remain in force.
+- Preview desktop state is isolated under `%LOCALAPPDATA%\DualTheater-Preview`; it does not import or overwrite the base profile. The TV preview uses `dev.dualtheater.tv.preview`, allowing both TV apps and their preferences to coexist. The Java namespace remains unchanged. Run only one host because default ports and the desktop instance mutex are shared.
+- Final branch checks on Linux: 52 Python tests passed and four Windows/mpv tests were skipped (56 total). Android debug assembly and all 14 Gradle JVM tests passed; lint completed with zero errors and 23 warnings. APK signature, preview package/launch activity, version alignment, JavaScript/Python syntax and documentation link/whitespace checks passed. Windows frozen-EXE/GUI checks were extended in CI but were not run here; Tkinter is unavailable on this Linux interpreter. No TV/HDMI or physical-sync validation has been performed.
+
 ## Architecture and invariants
 
 1. The Windows standard-library Python host serves the selected original MKV byte-for-byte with HTTP range support. It currently sends the complete container, including audio bytes the TV does not render; it does not demux a video-only network stream or transcode.
@@ -97,6 +105,7 @@ See [testing status](testing.md) and [hardware acceptance steps](hardware-test.m
 | `host/discovery.py`, `host/pairing.py` | Discovery, pairing and remembered credentials |
 | `host/controller.html` | Local Windows browser controller |
 | `host/player_download.py` | Explicit upstream download, integrity checks, safe staged extraction and private offline runtime |
+| `host/diagnostics.py`, `docs/diagnostics.md` | Unreleased bounded session metrics, shareable report allowlist and preview instructions |
 | `host/desktop.py`, `host/desktop_support.py`, `desktop_main.py` | Native desktop pages, private preferences, device selection and background host operations |
 | `tools_src/build_windows.py`, `requirements-build.txt` | Standalone Windows packaging with bundled resources, icon, version and runtime licenses |
 | `assets/`, `tools_src/generate_icons.py` | Original matching vector/Windows artwork and Android TV banner generation |
@@ -118,6 +127,8 @@ The included calibration clip is original SDR H.264 video with stereo TrueHD and
 
 ## Next work
 
+Keep feature work on `feature/playback-reliability` until the user chooses to integrate it. The software-only diagnostics/reconnect work is complete; next validate the Windows preview's native UI/frozen EXE, then test the matching preview apps on hardware when available. Preserve the base apps and do not publish or merge as part of this handoff.
+
 1. When the user has power and devices available, validate remote seek/play-pause, discovery and pairing on hardware.
 2. Calibrate physical A/V offset and check repeated seek/resume operations before claiming stable sync. Log measured drift separately from the user's perceived/externally measured lip-sync.
 3. Test longer sessions, high-bitrate passages and interruption recovery; refine only issues supported by evidence.
@@ -126,6 +137,10 @@ The included calibration clip is original SDR H.264 video with stereo TrueHD and
 No current hardware validation results should be invented to close these items. Do not store private addresses, media filenames, personal paths, endpoint identifiers, credentials, raw logs or signing keys in this context.
 
 ## Recent progress
+
+- 2026-10-28 (preview feature development): Created `feature/playback-reliability` from the preserved base commit. Added diagnostics/export, reconnect generation protection, regression coverage and isolated desktop/Android preview profiles as detailed above. Final software checks passed with the recorded skips/warnings. The user reported no TV access during a power outage; no hardware commands were run. No merge, push or release was performed.
+
+- 2026-10-28 (repository review): Read the current application source, tests, project documentation, launch/build scripts and CI. On this Linux workspace, `python3 -m unittest discover -s tests -v` passed 42 tests and skipped four Windows/mpv-only tests; the first sandboxed attempt could not create sockets, and the rerun with socket access passed. Android builds/JVM tests, packaged Windows checks and physical playback were not rerun. Static review identified a host-restart risk: TV `epoch` survives reconnection while a new coordinator starts at zero, so fresh commands can be rejected as stale. Review recommendations, not implemented features: session-aware reconnect handling and regression coverage, guided calibration through the existing media path, richer sanitized playback diagnostics, early format/track errors, coordinated position restoration and persistent private APK signing. Application code and published artifacts were unchanged.
 
 - 2026-10-28: Published and independently verified beta 0.4.1 with the user-approved mpv download alternative and improved Go to Player placement. Local and CI software checks passed as recorded above; the initial CI test-only short-path assertion was corrected to compare resolved Windows paths. README/setup/provenance/operating instructions are current. Physical output and A/V sync still require hardware acceptance.
 

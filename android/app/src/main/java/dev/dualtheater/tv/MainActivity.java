@@ -44,7 +44,7 @@ public final class MainActivity extends Activity {
     private EditText hostInput, portInput, tokenInput;
     private ControlClient client;
     private boolean connected = false, seekPending = false, loading = false;
-    private volatile long epoch = 0;
+    private final PlaybackSession playback = new PlaybackSession();
     private volatile long callbackGeneration = 0;
     private String error = "", decoderName = "";
     private volatile JSONObject frame = new JSONObject();
@@ -55,6 +55,9 @@ public final class MainActivity extends Activity {
     private int[] hdrTypes = new int[0];
     private boolean destroyed = false;
     private int bufferBudgetBytes;
+    private long droppedVideoFrames;
+    private double transferMbps = -1;
+    private long transferSampleNs;
     private final RemoteControls remote = new RemoteControls();
     private LinearLayout transport;
     private TextView transportTitle, transportState, transportTime, transportHint;
@@ -301,7 +304,7 @@ public final class MainActivity extends Activity {
         pendingRequest = request;
         try {
             JSONObject message = new JSONObject().put("op", "remote").put("request", request)
-                .put("epoch", epoch).put("action", action);
+                .put("epoch", playback.epoch()).put("action", action);
             if (action.equals("seek")) {
                 pendingTargetMs = remote.previewMs();
                 message.put("seconds", pendingTargetMs / 1000.0).put("toggle", toggleAfterSeek);
@@ -420,6 +423,15 @@ public final class MainActivity extends Activity {
             @Override public void onVideoDecoderInitialized(EventTime time, String name, long stamp, long duration) {
                 decoderName = name;
             }
+            @Override public void onDroppedVideoFrames(EventTime time, int count, long elapsedMs) {
+                droppedVideoFrames += Math.max(0, count);
+            }
+            @Override public void onBandwidthEstimate(EventTime time, int loadMs, long bytes, long estimate) {
+                if (loadMs > 0 && bytes > 0) {
+                    transferMbps = bytes * 8.0 / loadMs / 1000;
+                    transferSampleNs = System.nanoTime();
+                }
+            }
         });
         installFrameListener();
     }
@@ -433,11 +445,12 @@ public final class MainActivity extends Activity {
     }
 
     private void installFrameListener() {
-        final long listenerEpoch = epoch;
+        final long listenerEpoch = playback.epoch();
+        final long sessionGeneration = playback.generation();
         final long generation = ++callbackGeneration;
         frame = new JSONObject();
         player.setVideoFrameMetadataListener((pts, release, format, mediaFormat) -> {
-            if (listenerEpoch != epoch || generation != callbackGeneration) return;
+            if (!playback.matches(sessionGeneration) || generation != callbackGeneration) return;
             try {
                 frame = new JSONObject().put("epoch", listenerEpoch).put("position_ms", pts / 1000.0)
                     .put("release_ns", release).put("valid", release != C.TIME_UNSET && release > 0)
@@ -450,6 +463,7 @@ public final class MainActivity extends Activity {
 
     private void connect() {
         if (connecting) return;
+        cancelStart(); player.pause(); ++seekSerial;
         resetRemote(); remoteSupported = false; coordinatorEpoch = -1;
         if (client != null) client.close();
         String host = hostInput.getText().toString().trim();
@@ -501,6 +515,15 @@ public final class MainActivity extends Activity {
                 if (selectedHost != null && !hostId.isEmpty() && !selectedHost.id.equals(hostId)) {
                     info.setText("Laptop identity changed. Find and select it again."); client.close(); return;
                 }
+                // A restarted host begins at epoch zero. Retire all previous media
+                // and callbacks before accepting commands from this connection.
+                cancelStart(); ++seekSerial; resetRemote();
+                player.stop(); player.clearMediaItems(); player.setPlaybackSpeed(1f);
+                playback.reset(); installFrameListener();
+                loading = false; seekPending = false; error = ""; decoderName = "";
+                coordinatorEpoch = -1; coordinatorState = "idle"; movieTitle = ""; movieDurationMs = 0;
+                droppedVideoFrames = 0; transferMbps = -1; transferSampleNs = 0;
+                setup.setVisibility(View.VISIBLE);
                 if (!hostId.isEmpty() && !trusted.isEmpty()) {
                     getPreferences(MODE_PRIVATE).edit().putString("trusted_" + hostId, trusted)
                         .putString("last_host_id", hostId).putString("last_host_name", msg.optString("host_name", "Laptop")).apply();
@@ -521,15 +544,16 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (msg.has("error") && id < 0) throw new IllegalStateException(msg.getString("error"));
-            long incomingEpoch = msg.optLong("epoch", epoch);
-            if (incomingEpoch < epoch) throw new IllegalStateException("Stale command epoch");
+            long incomingEpoch = msg.optLong("epoch", playback.epoch());
+            boolean epochChanged = playback.accept(incomingEpoch);
             if (!op.equals("speed")) { cancelStart(); player.pause(); player.setPlaybackSpeed(1f); }
-            if (incomingEpoch != epoch) { epoch = incomingEpoch; installFrameListener(); }
+            if (epochChanged) installFrameListener();
             switch (op) {
                 case "pause": break;
                 case "load": {
                     resetRemote();
                     error = ""; loading = true; seekPending = true;
+                    droppedVideoFrames = 0; transferMbps = -1; transferSampleNs = 0;
                     String url = msg.getString("url");
                     android.net.Uri uri = android.net.Uri.parse(url);
                     if (!"http".equals(uri.getScheme())) throw new IllegalArgumentException("Only host HTTP media is supported");
@@ -552,10 +576,10 @@ public final class MainActivity extends Activity {
                     long delta = target - System.nanoTime();
                     if (delta < 100_000_000L || delta > 10_000_000_000L)
                         throw new IllegalStateException("Start deadline invalid or late");
-                    final long startEpoch = epoch;
+                    final long startGeneration = playback.generation();
                     scheduled = new Runnable() {
                         @Override public void run() {
-                            if (epoch != startEpoch || !connected) return;
+                            if (!playback.matches(startGeneration) || !connected) return;
                             long left = target - System.nanoTime();
                             if (left > 1_000_000L) { main.postDelayed(this, Math.max(1, left / 1_000_000L - 1)); return; }
                             scheduled = null;
@@ -576,7 +600,7 @@ public final class MainActivity extends Activity {
                 }
                 default: throw new IllegalArgumentException("Unknown command: " + op);
             }
-            if (id >= 0) client.send(new JSONObject().put("reply", id).put("epoch", epoch));
+            if (id >= 0) client.send(new JSONObject().put("reply", id).put("epoch", playback.epoch()));
             updateTransport();
             status();
         } catch (Exception e) {
@@ -587,11 +611,11 @@ public final class MainActivity extends Activity {
     }
 
     private void seekCompletion() {
-        final long serial = ++seekSerial, wantedEpoch = epoch;
+        final long serial = ++seekSerial, generation = playback.generation();
         // Wait for asynchronous Media3 seek processing and fresh READY state.
         main.postDelayed(new Runnable() {
             @Override public void run() {
-                if (destroyed || serial != seekSerial || wantedEpoch != epoch) return;
+                if (destroyed || serial != seekSerial || !playback.matches(generation)) return;
                 if (player.getPlaybackState() == Player.STATE_READY && !player.isLoading()) {
                     seekPending = false; status();
                 } else if (player.getPlaybackState() == Player.STATE_READY) {
@@ -619,13 +643,16 @@ public final class MainActivity extends Activity {
     private void status() {
         if (!connected || client == null || destroyed) return;
         try {
-            JSONObject s = new JSONObject().put("op", "status").put("epoch", epoch)
+            JSONObject s = new JSONObject().put("op", "status").put("epoch", playback.epoch())
                 .put("state", stateName()).put("position_ms", player.getCurrentPosition())
                 .put("buffered_ms", player.getBufferedPosition()).put("playing", player.isPlaying())
                 .put("speed", player.getPlaybackParameters().speed).put("seek_pending", seekPending)
                 .put("error", error).put("frame", frame).put("decoder", decoderName)
                 .put("heap_limit_mb", Runtime.getRuntime().maxMemory() / (1024 * 1024))
                 .put("buffer_budget_mb", bufferBudgetBytes / (1024 * 1024))
+                .put("dropped_video_frames", droppedVideoFrames)
+                .put("transfer_mbps", transferMbps >= 0 ? transferMbps : JSONObject.NULL)
+                .put("transfer_age_ms", transferSampleNs > 0 ? (System.nanoTime() - transferSampleNs) / 1000000.0 : JSONObject.NULL)
                 .put("display_hdr_types", new JSONArray(hdrTypes))
                 .put("decoders", capabilities).put("sample_ns", System.nanoTime());
             client.send(s);
