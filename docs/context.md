@@ -1,6 +1,6 @@
 # DualTheater project context
 
-Last updated: 2026-10-27 (Asia/Calcutta).
+Last updated: 2026-10-28 (Asia/Calcutta).
 
 This is the shared handoff for Codex sessions. Read it before starting work, then inspect the current repository and applicable `AGENTS.md` instructions. **Keeping this file current is mandatory:** update it after meaningful milestones, decisions, tests or blockers, and before a substantive handoff or publication. See [the full update rules](../AGENTS.md).
 
@@ -15,6 +15,7 @@ The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDM
 - Repository: [shadow-pheonix/dualtheater](https://github.com/shadow-pheonix/dualtheater), public, default branch `main`.
 - Published version: [v0.3.0-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.3.0-beta.1), explicitly a prerelease. Android version code is 5.
 - Downloads: development-signed TV APK, matching Windows host/source ZIP and SHA-256 checksums. Python and mpv are installed separately.
+- The README has direct release downloads plus installation/launch commands, TV sideloading and pairing, and operating/recovery instructions. There is no standalone Windows EXE/installer. `AGENTS.md` mandates updating affected README instructions in the same change whenever project behavior makes them outdated.
 - `main` can include documentation changes after the release. Existing release assets are immutable under the current workflow; a new application release requires a new beta version.
 - Public documentation and app positioning are brand-independent. Compatibility depends on the actual TV, firmware, format and HDMI endpoint.
 - The Windows laptop or desktop PC requires HDMI output, or a display/audio-capable USB-C (Type-C) port with a compatible HDMI adapter. Charging/data-only USB-C ports are insufficient. The adapter/driver must support TrueHD passthrough; adapter-based playback remains unverified in this project.
@@ -112,8 +113,6 @@ No current hardware validation results should be invented to close these items. 
 
 ## Recent progress
 
-- 2026-10-27: Clarified the README's purpose: use existing Windows hardware to reduce the need for a separate dedicated media player. Published using the public noreply identity.
-- 2026-10-27: Added this shared handoff, root agent instructions requiring frequent context updates, and a README link for future sessions. Documentation-only work; the content/privacy scan, all 14 relative links in the three edited documents and the Git whitespace check passed. No new player or hardware tests are claimed for this edit.
-- 2026-10-27: Clarified the HDMI or display-capable USB-C-to-HDMI hardware requirement in the README and setup steps. Kept TrueHD adapter compatibility conditional and explicitly untested. Documentation-only change; relative links, content/privacy and Git whitespace checks passed before publication; no new hardware tests were run.
-
-- 2026-10-27: Made laptop and desktop support explicit throughout the README overview, compatibility requirements and HDMI setup, and in this handoff. Documentation-only edit; content/link and whitespace checks passed; no new hardware tests were run.
+- 2026-10-27: Published the shared context and mandatory agent handoff rules. Clarified existing-hardware purpose and explicit Windows laptop/desktop HDMI or display-capable USB-C requirements; adapter TrueHD remains untested.
+- 2026-10-27: Added prominent direct beta APK/Windows ZIP/checksum links and documented download/extraction, prerequisites, optional ADB sideloading, host commands, pairing, movie loading, remote/browser operation, track changes, manual sync, reconnection and shutdown. Distinguished released functionality from proposed automatic calibration; no Windows installer or automatic calibration is claimed.
+- 2026-10-28: Finished the README guide and mandatory same-change instruction updates after an interrupted publishing attempt. Documentation verification checks all nine PowerShell blocks, 17 relative links/anchors, launcher/host flags, UI labels, release-runtime consistency, content/privacy and Git whitespace. No commands were executed against playback hardware and no new hardware tests were performed for these edits.

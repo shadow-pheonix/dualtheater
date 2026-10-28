@@ -17,6 +17,12 @@ Use a dated, concise progress entry and refresh the current-state sections. Keep
 
 Keep this file useful as a current handoff, not an unbounded transcript. Condense stale progress entries while preserving important decisions and unresolved issues. If documentation and code disagree, investigate and correct the context rather than silently treating it as authoritative evidence.
 
+## Keep user instructions accurate — mandatory
+
+Whenever a project update changes installation, downloads, prerequisites, commands, connection/pairing, controls, settings, recovery or supported behavior, review the README's Download, How to use and Operating the player sections. Update every affected instruction in the same change/commit before handoff or publication. Do not leave obsolete commands or UI labels for a future documentation pass.
+
+Verify documented command names, flags, paths, defaults and button labels against the current scripts/code. Update related setup guides and `docs/context.md` when affected. Keep download links and version-specific examples aligned with the release they actually describe, and clearly distinguish unreleased behavior on `main` from published builds. Do not claim a feature is available until the linked build contains it. Check relative links, placeholders, Markdown and Git whitespace; run functional checks only where the change warrants them, and state what was actually tested.
+
 ## Project constraints
 
 - Preserve original media bytes, HDR metadata and compressed TrueHD passthrough. Do not introduce transcoding, audio resampling or audio speed changes as a synchronization fix.
