@@ -1,6 +1,6 @@
 # DualTheater Calibration Preview — first phone client
 
-Unreleased phone version `0.1.0-beta.1` requires Windows/TV preview `0.5.0-beta.2`. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
+Experimental phone version `0.1.0-beta.1` requires Windows/TV preview `0.5.0-beta.2`. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
 
 ## Install and connect
 
