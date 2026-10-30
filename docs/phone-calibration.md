@@ -1,6 +1,6 @@
 # DualTheater Calibration Preview — phone client
 
-Unreleased phone version `0.1.1-beta.1` accompanies Windows/TV Robust Sync `0.6.0-beta.1` and remains compatible with the earlier preview protocol. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
+Experimental phone version `0.1.1-beta.1` accompanies Windows/TV Robust Sync `0.6.0-beta.1` and remains compatible with the earlier preview protocol. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
 
 ## Install and connect
 

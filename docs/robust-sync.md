@@ -1,6 +1,6 @@
 # Robust Sync experimental build and comparison
 
-Branch: `feature/robust-sync`, based on main commit `7debf90`. Windows/TV version: **0.6.0-beta.1**. Phone version: **0.1.1-beta.1**. This is a local experimental implementation, not a published release or a physical accuracy guarantee. The original `main` and `feature/playback-reliability` builds are preserved.
+Branch: `feature/robust-sync`, based on main commit `7debf90`. Windows/TV version: **0.6.0-beta.1**. Phone version: **0.1.1-beta.1**. This is a separately published experimental implementation; physical accuracy remains unvalidated. The original `main` and `feature/playback-reliability` builds are preserved.
 
 ## Install and launch
 
@@ -71,6 +71,6 @@ python -m pip install -r requirements-build.txt
 python tools_src/build_windows.py --dist dist/windows --work build/windows
 ```
 
-The existing CI workflow can validate/package the branch through manual workflow dispatch; its publish job is restricted to `main`. No push, workflow dispatch, merge or publication is performed by this local implementation.
+The existing CI workflow can validate/package the branch through manual workflow dispatch; its publish job is restricted to `main`. The user-authorized publication used explicit branch validation and release creation; no experimental merge into main was performed.
 
-The Linux development environment can assemble/sign debug APKs and run Python/JVM tests. Windows CNG, CIM/HDMI inspection, real mpv/WASAPI and the frozen native GUI require Windows validation. Real TV, S95TR and phone testing remain necessary before claiming improved physical sync. See [research and candidate decisions](sync-research.md), [phone details](phone-calibration.md) and [hardware acceptance](hardware-test.md).
+The Linux development environment can assemble/sign debug APKs and run Python/JVM tests. Windows CI validated CNG AES, real mpv source messages with null output and the frozen GUI. Actual CIM/HDMI routing and WASAPI hardware playback still require device validation. Real TV, S95TR and phone testing remain necessary before claiming improved physical sync. See [research and candidate decisions](sync-research.md), [phone details](phone-calibration.md) and [hardware acceptance](hardware-test.md).

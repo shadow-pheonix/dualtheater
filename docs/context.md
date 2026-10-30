@@ -10,11 +10,27 @@ Use an existing Windows laptop or desktop PC, compatible Android TV/Google TV an
 
 The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDMI, and stable physical A/V sync. This is an **experimental beta, still in testing**. Simultaneous playback has been observed; accurate physical lip-sync has not yet been established. Avoid describing the project as a finished replacement for a dedicated player.
 
-## Branch publication — user authorized 2026-10-30
+## Branch publication — completed 2026-10-30
 
-The user explicitly requested committing/pushing main and all branches, and publishing their builds. This supersedes the earlier local-only publication restriction; it does not request merging experimental timing into main. Three branches are being synchronized independently. Existing prerelease assets remain immutable. Main remains the original timing implementation with published `v0.4.1-beta.1`; the separate playback/phone preview targets `v0.5.0-beta.2`, and Robust Sync targets `v0.6.0-beta.1`.
+The user explicitly authorized committing/pushing main and both feature branches and publishing their builds, superseding the earlier local-only restriction. The branches remain separate; no feature timing was merged into main. Main's original v0.4.1-beta.1 assets remain unchanged. Published feature builds: [preview v0.5.0-beta.2](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.5.0-beta.2) (phone 0.1.0-beta.1) and [Robust Sync v0.6.0-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.6.0-beta.1) (phone 0.1.1-beta.1).
 
-Publication is in progress. Each feature branch must pass its Windows host/real-mpv null-output tests, frozen-GUI/resource/start-stop smoke check and Android build/JVM/lint checks before its matching CI artifacts are published. Main's existing release is retained; a verification run must not overwrite it. Feature workflows validate on explicit dispatch, while release creation is performed against the exact validated feature commit. No physical playback/accuracy result follows from CI.
+Windows CI passed on all three lines, including real mpv null-output tests, EXE builds and frozen GUI/resource/host-start-stop/downloader checks. Android assembly, JVM tests and lint passed. Robust Sync's real source-timestamp sampler and Windows CNG AES vector passed. CI does not test acoustic latency, real TV/phone/S95TR behavior, active HDMI routing or HDR/Atmos reception.
+
+Feature EXEs, TV/phone APKs, source ZIPs and checksum manifests were downloaded from CI and checked before publication. Public downloads were independently checked against GitHub SHA-256 digests and manifests; APK signatures/package identities and ZIP integrity/privacy/provenance passed. Old release asset IDs/digests/sizes were unchanged. Release assets stay pinned to the validated build commits; later branch documentation commits do not rebuild or overwrite those assets.
+
+- Main verification: https://github.com/shadow-pheonix/dualtheater/actions/runs/41021485992
+- Preview verification: https://github.com/shadow-pheonix/dualtheater/actions/runs/41021504117
+- Robust Sync verification: https://github.com/shadow-pheonix/dualtheater/actions/runs/41021507447
+
+Build provenance (distinct from later branch documentation heads):
+
+| Branch | Release build commit |
+| --- | --- |
+| `main` / v0.4.1-beta.1 | `eebf9a256fb50d54640022ad6a190d29f50926c2` |
+| `feature/playback-reliability` / v0.5.0-beta.2 | `17a2057519c50da71a910dafb385d355a1df300f` |
+| `feature/robust-sync` / v0.6.0-beta.1 | `d06248b5d66005e2121b3adc46ebabb22287d5b5` |
+
+All Windows Python checks passed without skips: 46 main, 66 preview and 85 Robust Sync. Source ZIP contents match their pinned commits under Windows checkout line-ending conversion. BUILD-INFO.json in each feature release records the original CI payload hashes; its full public manifest also covers that build-info file. Main has no phone APK. Later documentation-only changes do not alter binaries or tags.
 
 ## Current public state
 
@@ -35,7 +51,7 @@ Local checks: all 46 Python tests passed with the actual upstream-downloaded run
 - `main` can include documentation changes after the release. Existing release assets are immutable under the workflow; application changes need a new beta version.
 - Compatibility depends on actual TV, firmware, format and HDMI endpoint. The laptop/desktop needs HDMI output, or a display/audio-capable USB-C port with a compatible HDMI adapter. Data/charging-only USB-C is insufficient. Adapter TrueHD remains unverified.
 
-## Active Robust Sync implementation (unreleased)
+## Active Robust Sync implementation (published separately)
 
 - User authorized the finalized shortlist after researching phone-free synchronization and LG S95TR delay. Implemented on `feature/robust-sync`, a separate worktree based on main `7debf90`. Earlier diagnostics/phone prerequisites were cherry-picked; original `feature/playback-reliability` remains at `b685580`. At the implementation milestone there was no push, merge, CI dispatch or publication; see the newer publication authorization above.
 - Windows/TV version **0.6.0-beta.1** (TV code 10), phone **0.1.1-beta.1** (code 2). Desktop state is isolated under `%LOCALAPPDATA%\DualTheater-RobustSync`; TV ID `dev.dualtheater.tv.robustsync` coexists with both earlier apps. Phone retains its preview package ID for updating. Default ports and the single-host mutex remain shared. Source GUI launcher: `Start-Desktop.cmd`; no Windows EXE was built on Linux.
@@ -48,7 +64,7 @@ Local checks: all 46 Python tests passed with the actual upstream-downloaded run
 - Handoff artifacts are generated under ignored `dist/robust-sync`: matching signed debug TV/phone APKs, a source ZIP from the committed feature HEAD and SHA-256 checksums. Source launch uses Windows Python/Tk and `Start-Desktop.cmd`; Windows EXE build instructions/CI checks are provided. Archive integrity/privacy and checksums are verified before handoff; no private profiles, raw hardware logs, caches, signing keys or personal credentials are included.
 - See [installation/comparison](robust-sync.md), [research and rejected alternatives](sync-research.md) and [diagnostics](diagnostics.md). Hardware acceptance must compare unchanged main first, then branch baseline/audio-clock/servo at zero offset, then optional phone correction. No physical accuracy improvement is claimed from software tests.
 
-## Previous feature branch (unreleased)
+## Previous feature branch (published separately)
 
 - User requested development on `feature/playback-reliability` while the TV is unavailable because of a power outage. Local `main` remains at `7debf90`; preserve the published/base build. The later publication authorization above supersedes the earlier local-only limit; do not merge this feature into main.
 - The initial feature was playback diagnostics and sanitized export. Phone calibration v1 software is complete without a separate reference fixture. Branch host/TV builds use `0.5.0-beta.2` (TV version code 9); the phone client is `0.1.0-beta.1`. Public downloads remain `0.4.1-beta.1`.
@@ -149,7 +165,7 @@ The included calibration clip is original SDR H.264 video with stereo TrueHD and
 
 ## Next work
 
-The shortlist is implemented on `feature/robust-sync`; preserve `main` and the earlier feature branch. Next validate Windows source/frozen packaging, real mpv source-clock messages with null output, CNG AES and CIM inspection. Then follow [the comparison guide](robust-sync.md) when power/TV are available. No separate physical reference fixture is required. Publish only under the explicit authorization above; keep the experimental branch separate from main.
+The shortlist is implemented on `feature/robust-sync`; preserve `main` and the earlier feature branch. Windows CI now passed source/frozen packaging, real mpv source-clock messages with null output and CNG AES. Next validate actual CIM/HDMI routing and physical playback, then follow [the comparison guide](robust-sync.md) when power/TV are available. No separate physical reference fixture is required. Publish only under the explicit authorization above; keep the experimental branch separate from main.
 
 1. When the user has power and devices available, validate remote seek/play-pause, discovery and pairing on hardware.
 2. Calibrate physical A/V offset and check repeated seek/resume operations before claiming stable sync. Log measured drift separately from the user's perceived/externally measured lip-sync.
