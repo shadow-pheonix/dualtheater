@@ -8,6 +8,10 @@ DualTheater plays the **video on an Android TV or Google TV** using its native h
 
 **Unreleased Robust Sync branch:** `feature/robust-sync` builds Windows/TV `0.6.0-beta.1` with selectable **Original timing**, **Video servo** and **Audio clock** modes, separate saved offsets, source-timestamped audio, an authenticated timing connection, rendered-frame diagnostics and read-only LG S95TR/HDMI latency inspection. It includes the optional phone client `0.1.1-beta.1` for measuring before applying a correction. See the [installation and comparison guide](docs/robust-sync.md). The earlier `feature/playback-reliability` preview and base apps/releases remain unchanged. These experimental changes are not in the downloadable `0.4.1-beta.1` builds below, and improved physical sync is not yet established.
 
+## Branch builds
+
+Main's baseline release remains [v0.4.1-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.4.1-beta.1). Separate releases are being prepared for `feature/playback-reliability` (**0.5.0-beta.2**, diagnostics and phone calibration) and `feature/robust-sync` (**0.6.0-beta.1**, three timing modes and receiver inspection). Feature publication is pending Windows/Android CI validation. Each release must use its own matching Windows/TV pair; phone versions are 0.1.0-beta.1 and 0.1.1-beta.1 respectively. Experimental timing is not merged into main; physical accuracy still needs hardware testing.
+
 ## Download
 
 **Current downloadable version: v0.4.1-beta.1 — experimental, still in testing.** The Windows EXE and TV APK are published and verified. Use the matching Windows and TV versions.

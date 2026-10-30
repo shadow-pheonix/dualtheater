@@ -1,6 +1,6 @@
 # DualTheater project context
 
-Last updated: 2026-10-28 (Asia/Calcutta).
+Last updated: 2026-10-30 (UTC).
 
 This is the shared handoff for Codex sessions. Read it before starting work, then inspect the current repository and applicable `AGENTS.md` instructions. **Keeping this file current is mandatory:** update it after meaningful milestones, decisions, tests or blockers, and before a substantive handoff or publication. See [the full update rules](../AGENTS.md).
 
@@ -9,6 +9,12 @@ This is the shared handoff for Codex sessions. Read it before starting work, the
 Use an existing Windows laptop or desktop PC, compatible Android TV/Google TV and HDMI sound system to play high-quality 4K remuxes without buying another dedicated media player, such as an NVIDIA Shield.
 
 The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDMI, and stable physical A/V sync. This is an **experimental beta, still in testing**. Simultaneous playback has been observed; accurate physical lip-sync has not yet been established. Avoid describing the project as a finished replacement for a dedicated player.
+
+## Branch publication — user authorized 2026-10-30
+
+The user explicitly requested committing/pushing main and all branches, and publishing their builds. This supersedes the earlier local-only publication restriction; it does not request merging experimental timing into main. Three branches are being synchronized independently. Existing prerelease assets remain immutable. Main remains the original timing implementation with published `v0.4.1-beta.1`; the separate playback/phone preview targets `v0.5.0-beta.2`, and Robust Sync targets `v0.6.0-beta.1`.
+
+Publication is in progress. Each feature branch must pass its Windows host/real-mpv null-output tests, frozen-GUI/resource/start-stop smoke check and Android build/JVM/lint checks before its matching CI artifacts are published. Main's existing release is retained; a verification run must not overwrite it. Feature workflows validate on explicit dispatch, while release creation is performed against the exact validated feature commit. No physical playback/accuracy result follows from CI.
 
 ## Current public state
 
@@ -31,7 +37,7 @@ Local checks: all 46 Python tests passed with the actual upstream-downloaded run
 
 ## Active Robust Sync implementation (unreleased)
 
-- User authorized the finalized shortlist after researching phone-free synchronization and LG S95TR delay. Implemented on `feature/robust-sync`, a separate worktree based on main `7debf90`. Earlier diagnostics/phone prerequisites were cherry-picked; original `feature/playback-reliability` remains at `b685580`. No push, merge, CI dispatch or publication.
+- User authorized the finalized shortlist after researching phone-free synchronization and LG S95TR delay. Implemented on `feature/robust-sync`, a separate worktree based on main `7debf90`. Earlier diagnostics/phone prerequisites were cherry-picked; original `feature/playback-reliability` remains at `b685580`. At the implementation milestone there was no push, merge, CI dispatch or publication; see the newer publication authorization above.
 - Windows/TV version **0.6.0-beta.1** (TV code 10), phone **0.1.1-beta.1** (code 2). Desktop state is isolated under `%LOCALAPPDATA%\DualTheater-RobustSync`; TV ID `dev.dualtheater.tv.robustsync` coexists with both earlier apps. Phone retains its preview package ID for updating. Default ports and the single-host mutex remain shared. Source GUI launcher: `Start-Desktop.cmd`; no Windows EXE was built on Linux.
 - Three explicitly selected modes: **Original timing (baseline)** retains main's clock/frame-release servo; **Video servo (experimental)** uses source observations, affine clocks and uncertainty-aware control; default **Audio clock (experimental)** supplies Media3's renderer clock from Windows audio anchors, without a competing host servo. Baseline includes shared branch diagnostics/reconnect/phone changes, so is not byte-identical main. Disconnect to change mode. Each mode has separate zero-default calibration storage with provenance/context; audio-clock changes take effect at the next shared barrier.
 - New foundations: bounded affine four-stamp clock estimation, source-timestamped mpv Lua observations with a separate source-clock mapping, bounded audio phase/rate estimation, session-authorized dedicated TCP timing on existing 8766, fresh epoch/sequence checks, monotonic bounded video clock slew, holdover/expiry and startup advancement verification. Timing faults pause audio through the coordinator. Existing underrun recovery remains coordinated. Compressed TrueHD, original media, hardware video and audio 1x are preserved.
@@ -44,7 +50,7 @@ Local checks: all 46 Python tests passed with the actual upstream-downloaded run
 
 ## Previous feature branch (unreleased)
 
-- User requested development on `feature/playback-reliability` while the TV is unavailable because of a power outage. Local `main` remains at `7debf90`; preserve the published/base build. Do not merge or publish this work as part of feature development.
+- User requested development on `feature/playback-reliability` while the TV is unavailable because of a power outage. Local `main` remains at `7debf90`; preserve the published/base build. The later publication authorization above supersedes the earlier local-only limit; do not merge this feature into main.
 - The initial feature was playback diagnostics and sanitized export. Phone calibration v1 software is complete without a separate reference fixture. Branch host/TV builds use `0.5.0-beta.2` (TV version code 9); the phone client is `0.1.0-beta.1`. Public downloads remain `0.4.1-beta.1`.
 - Implemented in the branch: a native Diagnostics page and browser report export, bounded timing statistics, operation/failure/recovery/disconnect counters, buffer/transfer/frame-drop telemetry, and an explicit report field allowlist. Playback epochs now reset per authenticated TV connection, with callback-generation invalidation across restarts. The host pauses if a replacement TV session reports a different playback epoch, preventing old audio from continuing through a fast reconnect. The original-media and audio/barrier invariants remain in force.
 - Preview desktop state is isolated under `%LOCALAPPDATA%\DualTheater-Preview`; it does not import or overwrite the base profile. The TV preview uses `dev.dualtheater.tv.preview`, allowing both TV apps and their preferences to coexist. The Java namespace remains unchanged. Run only one host because default ports and the desktop instance mutex are shared.
@@ -143,7 +149,7 @@ The included calibration clip is original SDR H.264 video with stereo TrueHD and
 
 ## Next work
 
-The shortlist is implemented on `feature/robust-sync`; preserve `main` and the earlier feature branch. Next validate Windows source/frozen packaging, real mpv source-clock messages with null output, CNG AES and CIM inspection. Then follow [the comparison guide](robust-sync.md) when power/TV are available. No separate physical reference fixture is required. Do not merge or publish as part of local feature development.
+The shortlist is implemented on `feature/robust-sync`; preserve `main` and the earlier feature branch. Next validate Windows source/frozen packaging, real mpv source-clock messages with null output, CNG AES and CIM inspection. Then follow [the comparison guide](robust-sync.md) when power/TV are available. No separate physical reference fixture is required. Publish only under the explicit authorization above; keep the experimental branch separate from main.
 
 1. When the user has power and devices available, validate remote seek/play-pause, discovery and pairing on hardware.
 2. Calibrate physical A/V offset and check repeated seek/resume operations before claiming stable sync. Log measured drift separately from the user's perceived/externally measured lip-sync.
