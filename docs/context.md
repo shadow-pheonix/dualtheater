@@ -1,6 +1,6 @@
 # DualTheater project context
 
-Last updated: 2026-10-28 (Asia/Calcutta).
+Last updated: 2026-10-30 (UTC).
 
 This is the shared handoff for Codex sessions. Read it before starting work, then inspect the current repository and applicable `AGENTS.md` instructions. **Keeping this file current is mandatory:** update it after meaningful milestones, decisions, tests or blockers, and before a substantive handoff or publication. See [the full update rules](../AGENTS.md).
 
@@ -9,6 +9,12 @@ This is the shared handoff for Codex sessions. Read it before starting work, the
 Use an existing Windows laptop or desktop PC, compatible Android TV/Google TV and HDMI sound system to play high-quality 4K remuxes without buying another dedicated media player, such as an NVIDIA Shield.
 
 The primary target is native TV HDR video, untouched Dolby TrueHD Atmos over HDMI, and stable physical A/V sync. This is an **experimental beta, still in testing**. Simultaneous playback has been observed; accurate physical lip-sync has not yet been established. Avoid describing the project as a finished replacement for a dedicated player.
+
+## Branch publication — user authorized 2026-10-30
+
+The user explicitly requested committing/pushing main and all branches, and publishing their builds. This supersedes the earlier local-only publication restriction; it does not request merging experimental timing into main. Three branches are being synchronized independently. Existing prerelease assets remain immutable. Main remains the original timing implementation with published `v0.4.1-beta.1`; the separate playback/phone preview targets `v0.5.0-beta.2`, and Robust Sync targets `v0.6.0-beta.1`.
+
+Publication is in progress. Each feature branch must pass its Windows host/real-mpv null-output tests, frozen-GUI/resource/start-stop smoke check and Android build/JVM/lint checks before its matching CI artifacts are published. Main's existing release is retained; a verification run must not overwrite it. Feature workflows validate on explicit dispatch, while release creation is performed against the exact validated feature commit. No physical playback/accuracy result follows from CI.
 
 ## Current public state
 

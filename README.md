@@ -6,6 +6,10 @@
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
+## Branch builds
+
+Main's baseline release remains [v0.4.1-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.4.1-beta.1). Separate releases are being prepared for `feature/playback-reliability` (**0.5.0-beta.2**, diagnostics and phone calibration) and `feature/robust-sync` (**0.6.0-beta.1**, three timing modes and receiver inspection). Feature publication is pending Windows/Android CI validation. Each release must use its own matching Windows/TV pair; phone versions are 0.1.0-beta.1 and 0.1.1-beta.1 respectively. Experimental timing is not merged into main; physical accuracy still needs hardware testing.
+
 ## Download
 
 **Current downloadable version: v0.4.1-beta.1 — experimental, still in testing.** The Windows EXE and TV APK are published and verified. Use the matching Windows and TV versions.
