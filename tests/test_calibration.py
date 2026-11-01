@@ -149,3 +149,67 @@ class CalibrationProtocolTests(unittest.TestCase):
         self.assertEqual(self.app.offset_ms, 90)
         self.assertEqual(self.app.offset_file.read_bytes(), original)
         self.assertFalse(self.app.offset_file.with_suffix('.tmp').exists())
+
+    def test_complete_just_after_natural_end_is_measured_before_apply(self):
+        run_id = self.start()
+        with self.app.op_lock:
+            self.app.pause_both('ended')
+        result = self.phone.request('complete', run_id=run_id,
+            pairs=[{'gap_ms': 12, 'uncertainty_ms': 15}] * 6)
+        self.assertTrue(result['ok'], result)
+        self.wait(lambda: self.app.calibration.snapshot()['state'] == 'measured')
+        self.assertEqual(self.app.offset_ms, 0)
+        self.assertEqual(self.app.state, 'paused')
+        self.assertTrue(self.phone.request('apply', run_id=run_id)['ok'])
+        self.assertEqual(self.app.offset_ms, -12)
+
+    def test_missing_capture_at_end_reports_detector_counts_without_applying(self):
+        run_id = self.start()
+        progress = {'flashes': 6, 'beeps': 0, 'flash_onsets_ms': [0, 2792, 6083, 8500, 12208, 15583], 'beep_onsets_ms': []}
+        self.assertTrue(self.phone.request('capture_progress', run_id=run_id, capture=progress)['ok'])
+        with patch('host.calibration.CAPTURE_FINISH_GRACE_SECONDS', .03):
+            with self.app.op_lock:
+                self.app.pause_both('ended')
+            self.wait(lambda: self.app.calibration.snapshot()['state'] == 'error')
+        state = self.app.calibration.snapshot()
+        self.assertIn('6 flashes and 0 beeps', state['error'])
+        self.assertNotIn('Playback changed', state['error'])
+        self.assertIsNone(state['result'])
+        self.assertEqual(self.app.offset_ms, 0)
+        self.assertFalse(self.phone.request('complete', run_id=run_id,
+            pairs=[{'gap_ms': 12, 'uncertainty_ms': 15}] * 6)['ok'])
+
+    def test_progress_is_owned_bounded_allowlisted_and_monotonic(self):
+        run_id = self.start()
+        valid = {'flashes': 1, 'beeps': 1, 'flash_onsets_ms': [0], 'beep_onsets_ms': [0]}
+        self.assertTrue(self.phone.welcome['capture_diagnostics'])
+        self.assertFalse(self.phone.request('capture_progress', run_id='stale', capture=valid)['ok'])
+        for invalid in (valid | {'flashes': True}, valid | {'beeps': 25},
+                        valid | {'flash_onsets_ms': [float('nan')]}, valid | {'beep_onsets_ms': []},
+                        valid | {'flash_onsets_ms': [1]}):
+            self.assertFalse(self.phone.request('capture_progress', run_id=run_id, capture=invalid)['ok'])
+        self.assertTrue(self.phone.request('capture_progress', run_id=run_id,
+            capture=valid | {'recording': 'must not be retained', 'address': 'private'})['ok'])
+        self.assertEqual(self.app.calibration.snapshot()['capture'], valid)
+        zero = {'flashes': 0, 'beeps': 0, 'flash_onsets_ms': [], 'beep_onsets_ms': []}
+        self.assertFalse(self.phone.request('capture_progress', run_id=run_id, capture=zero)['ok'])
+
+    def test_manual_pause_is_not_treated_as_a_natural_end(self):
+        run_id = self.start()
+        self.app.action({'action': 'pause'})
+        self.wait(lambda: self.app.calibration.snapshot()['state'] == 'error')
+        self.assertFalse(self.phone.request('complete', run_id=run_id,
+            pairs=[{'gap_ms': 12, 'uncertainty_ms': 15}] * 6)['ok'])
+        self.assertEqual(self.app.offset_ms, 0)
+
+    def test_end_grace_cannot_be_extended_by_a_delayed_completion(self):
+        run_id = self.start()
+        with patch('host.calibration.CAPTURE_FINISH_GRACE_SECONDS', .01):
+            with self.app.op_lock:
+                self.app.pause_both('ended')
+                with self.app.calibration.lock:
+                    self.assertTrue(self.app.calibration._natural_end(self.app.calibration.run))
+                time.sleep(.03)
+            self.assertFalse(self.phone.request('complete', run_id=run_id,
+                pairs=[{'gap_ms': 12, 'uncertainty_ms': 15}] * 6)['ok'])
+        self.assertEqual(self.app.offset_ms, 0)

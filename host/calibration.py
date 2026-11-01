@@ -12,7 +12,25 @@ FIXTURE_ID = 'phone-v1'
 CUE_FRAMES = (48, 115, 194, 252, 341, 422)
 CUE_TIMES_MS = [frame * 1000 / 24 for frame in CUE_FRAMES]
 FIXTURE_SHA256 = 'c0a3fa94e5c81611624b20499867e581c06cf9622cd625433c53d28b933bc214'
-ACTIVE = ('preparing', 'playing', 'finishing')
+ACTIVE = ('preparing', 'playing', 'awaiting_capture', 'finishing')
+CAPTURE_FINISH_GRACE_SECONDS = 3
+
+
+def capture_progress(value):
+    """Numeric event diagnostics only; never accept recordings or arbitrary fields."""
+    if not isinstance(value, dict):
+        raise ValueError('Invalid capture diagnostics')
+    result = {}
+    for count_key, times_key in (('flashes', 'flash_onsets_ms'), ('beeps', 'beep_onsets_ms')):
+        count = value.get(count_key)
+        rows = value.get(times_key)
+        if type(count) is not int or not 0 <= count <= 24 or not isinstance(rows, list) or len(rows) != count:
+            raise ValueError('Invalid capture event count')
+        times = [bounded(t, 0, 75000) for t in rows]
+        if times and (times[0] != 0 or any(b <= a for a, b in zip(times, times[1:]))):
+            raise ValueError('Invalid capture event intervals')
+        result[count_key], result[times_key] = count, times
+    return result
 
 
 def bounded(value, low, high):
@@ -55,6 +73,8 @@ class Run:
     worker: object = None
     preparing_owned: bool = False
     context: object = None
+    capture: dict = field(default_factory=dict)
+    ended_at: object = None
 
 
 class CalibrationService:
@@ -82,6 +102,7 @@ class CalibrationService:
             peer = self.app.peer
             return {'state': run.state if run else 'idle', 'run_id': run.run_id if run else None,
                     'error': run.error if run else '', 'result': run.result if run else None,
+                    'capture': dict(run.capture) if run else {},
                     'video_lead_ms': self.app.offset_ms, 'sync_mode': self.app.sync_mode,
                     'tv_connected': bool(peer and not peer.closed),
                     'phone_connected': self.owner is not None, 'fixture_id': FIXTURE_ID,
@@ -117,6 +138,41 @@ class CalibrationService:
         return (self._owns_playback(run) and self.app.offset_ms == run.base_lead
                 and (run.context is None or run.context == self.app.profile_context()))
 
+    def progress(self, owner, run_id, value):
+        data = capture_progress(value)
+        with self.lock:
+            run = self._owned(owner, run_id)
+            if run.state not in ACTIVE:
+                raise ValueError('Capture run is no longer active')
+            if any(data[k] < run.capture.get(k, 0) for k in ('flashes', 'beeps')):
+                raise ValueError('Capture counts moved backward; start a new test')
+            changed = data != run.capture
+            run.capture = data
+        if changed:
+            self.app.log(f"Calibration capture: flashes={data['flashes']}, beeps={data['beeps']}")
+
+    def _natural_end(self, run):
+        """Only the coordinator's normal EOF pause may advance the owned epoch."""
+        if run.state not in ('playing', 'awaiting_capture') or self.app.state != 'ended':
+            return False
+        if run.ended_at is None:
+            same = (self.app.peer is run.peer and not run.peer.closed and self.app.media == self.fixture
+                    and self.app.epoch == run.epoch + 1 and self.app.offset_ms == run.base_lead
+                    and run.context == self.app.profile_context())
+            if not same:
+                return False
+            run.epoch = self.app.epoch
+            run.ended_at = time.monotonic()
+            run.state = 'awaiting_capture'
+            self.app.log('Calibration reference ended; waiting briefly for the phone result')
+        return self._same_playback(run)
+
+    def _missing_capture(self, run):
+        if run.capture:
+            return (f"No matched six-cue measurement: phone detected {run.capture['flashes']} flashes "
+                    f"and {run.capture['beeps']} beeps. Keep the TV centered, make the beeps audible and retry.")
+        return 'Reference ended without a complete six-cue phone measurement; retry with capture diagnostics enabled'
+
     def _measure(self, run):
         try:
             # Validate the reference bytes before opening any media/audio device.
@@ -144,13 +200,18 @@ class CalibrationService:
                 if self.app.stop.is_set():
                     return
                 with self.app.op_lock:
-                    if not self._same_playback(run) or self.app.state != 'playing':
-                        raise ValueError('Playback changed during capture; retry once playback is stable')
+                    with self.lock:
+                        ended = self._natural_end(run)
+                        if not self._same_playback(run) or (self.app.state != 'playing' and not ended):
+                            raise ValueError('Playback changed during capture; retry once playback is stable')
+                        if ended and time.monotonic() - run.ended_at > CAPTURE_FINISH_GRACE_SECONDS:
+                            raise ValueError(self._missing_capture(run))
                 if time.monotonic() > deadline:
                     raise ValueError('No complete capture received; retry with the TV centered in the guide')
         except ValueError as error:
             with self.lock:
                 run.error, run.state = str(error), 'error'
+            self.app.log('Calibration rejected: ' + str(error))
         except Exception:
             with self.lock:
                 if not run.stop.is_set():
@@ -175,8 +236,12 @@ class CalibrationService:
             with self.lock:
                 run = self._owned(owner, run_id)
                 if run.state != 'playing' or not self._same_playback(run) or self.app.state != 'playing':
-                    raise ValueError('Playback changed; start a new calibration test')
+                    ended = self._natural_end(run)
+                    if (run.state != 'awaiting_capture' or not ended
+                        or time.monotonic() - run.ended_at > CAPTURE_FINISH_GRACE_SECONDS):
+                        raise ValueError('Playback changed or capture finished too late; start a new calibration test')
                 run.result = summarize(pairs, run.base_lead)
+                self.app.log('Calibration received all six matched pairs; awaiting explicit Apply')
                 run.state = 'finishing'
                 run.stop.set()
 

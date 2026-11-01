@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1-beta.1 — local calibration completion/diagnostics fix (unreleased)
+
+- Phone 0.1.2-beta.1 logs numeric flash/beep detections and relative onset intervals via `DTCalibration`; capable hosts also receive bounded progress telemetry.
+- Normal reference EOF permits a three-second completion window and reports missing detector counts. Manual playback/context changes still invalidate capture.
+- Complete six-pair validation and explicit Apply remain required; no accuracy thresholds, audio timing or TV synchronization algorithms changed.
+
 ## 0.6.0-beta.1 — unreleased Robust Sync comparison
 
 - Separate main-based branch and isolated desktop/TV identity; original timing, improved video-servo and remote-audio-clock modes with independent zero-default offset files.

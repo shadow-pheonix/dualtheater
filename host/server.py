@@ -892,6 +892,7 @@ class ControlHandler(socketserver.StreamRequestHandler):
         try:
             app.calibration.attach(phone)
             phone.send({'op': 'welcome', 'version': 1, 'role': 'calibration', 'calibration_protocol': 1,
+                        'capture_diagnostics': True,
                         'host_id': app.pairings.host_id, 'host_name': app.host_name,
                         'trusted_token': trusted_token, 'calibration': app.calibration.snapshot()})
             while not app.stop.is_set():
@@ -914,6 +915,8 @@ class ControlHandler(socketserver.StreamRequestHandler):
                         app.calibration.start(phone)
                     elif action == 'complete':
                         app.calibration.complete(phone, msg.get('run_id'), msg.get('pairs'))
+                    elif action == 'capture_progress':
+                        app.calibration.progress(phone, msg.get('run_id'), msg.get('capture'))
                     elif action == 'apply':
                         app.calibration.apply(phone, msg.get('run_id'))
                     elif action == 'cancel':

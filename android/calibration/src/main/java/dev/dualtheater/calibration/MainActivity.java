@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.graphics.*;
 import android.os.*;
 import android.text.InputType;
+import android.util.Log;
 import android.view.*;
 import android.widget.*;
 import java.util.*;
@@ -27,6 +28,9 @@ public final class MainActivity extends Activity {
     private boolean foreground, connected, connecting, warming, starting, permissionStart;
     private String selectedId = "", selectedAddress = "", runId = "", remoteState = "idle";
     private int selectedPort = 8766;
+    private boolean captureDiagnostics;
+    private String lastCaptureProgress = "";
+    private String loggedState = "";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -146,6 +150,7 @@ public final class MainActivity extends Activity {
                 problem.setText(message.optString("error", "Enter the current pairing code")); client.close(); return;
             }
             if (message.optString("op").equals("welcome")) {
+                captureDiagnostics = message.optBoolean("capture_diagnostics", false);
                 if (connected || !message.optString("role").equals("calibration") || message.optInt("calibration_protocol") != 1)
                     throw new IllegalStateException("Use the matching Windows preview with phone calibration support");
                 String hostId = UUID.fromString(message.getString("host_id")).toString();
@@ -160,6 +165,7 @@ public final class MainActivity extends Activity {
                 client.startPolling();
             }
             if (message.has("ok") && !message.optBoolean("ok")) {
+                Log.w("DTCalibration", "host_rejected: " + message.optString("error", "Calibration command failed"));
                 problem.setText(message.optString("error", "Calibration command failed"));
                 if ("start".equals(action) || "complete".equals(action)) { stopCapture(); client.send("cancel", null); }
             }
@@ -168,9 +174,17 @@ public final class MainActivity extends Activity {
             if (state != null) {
                 if (!state.optString("fixture_id").equals("phone-v1")) throw new IllegalStateException("Calibration fixture version mismatch");
                 remoteState = state.optString("state", "idle"); runId = state.optString("run_id", "");
+                if (!remoteState.equals(loggedState)) {
+                    loggedState = remoteState;
+                    Log.i("DTCalibration", "host_state=" + remoteState);
+                }
                 status.setText("Connected · " + state.optString("sync_mode", "legacy") + " · " + remoteState
                     + (state.optBoolean("tv_connected") ? " · TV connected" : " · Connect the TV first"));
-                if (!state.optString("error").isEmpty()) problem.setText(state.optString("error"));
+                if (!state.optString("error").isEmpty()) {
+                    if (!state.optString("error").equals(problem.getText().toString()))
+                        Log.w("DTCalibration", "host_capture_error: " + state.optString("error"));
+                    problem.setText(state.optString("error"));
+                }
                 if (!warming && !starting && Arrays.asList("error", "cancelled", "measured", "applied").contains(remoteState)) stopCapture();
                 JSONObject measured = state.optJSONObject("result");
                 if (measured != null) {
@@ -196,6 +210,7 @@ public final class MainActivity extends Activity {
         }
         problem.setText(""); result.setText("Measuring physical light and sound. Keep the TV centered and remain quiet.");
         warming = true; controls(); preview.setAlpha(1f);
+        lastCaptureProgress = "";
         final CaptureController[] source = new CaptureController[1];
         source[0] = new CaptureController(this, preview, new CaptureController.Listener() {
             @Override public void ready() { main.post(() -> {
@@ -203,9 +218,23 @@ public final class MainActivity extends Activity {
                 source[0].begin(); warming = false; starting = true; status.setText("Capture ready. Preparing the test on Windows…");
                 client.send("start", null); controls();
             }); }
-            @Override public void progress(int flashes, int tones) { main.post(() -> {
+            @Override public void progress(MeasurementEngine.Diagnostics diagnostics) { main.post(() -> {
                 if (capture == source[0]) progress.setText(warming ? "Stabilizing exposure and capture clocks…"
-                    : "Detected flashes: " + flashes + " · Beeps: " + tones + " · Looking for six matched cues");
+                    : "Detected flashes: " + diagnostics.flashes + " · Beeps: " + diagnostics.beeps + " · Looking for six matched cues");
+                if (capture == source[0] && captureDiagnostics && connected && !warming && !starting && active()) {
+                    String key = runId + ":" + diagnostics.summary();
+                    if (!key.equals(lastCaptureProgress)) {
+                        try {
+                            JSONObject data = new JSONObject().put("flashes", diagnostics.flashes).put("beeps", diagnostics.beeps);
+                            JSONArray video = new JSONArray(), audio = new JSONArray();
+                            for (double value : diagnostics.flashOnsetsMs) video.put(value);
+                            for (double value : diagnostics.beepOnsetsMs) audio.put(value);
+                            data.put("flash_onsets_ms", video).put("beep_onsets_ms", audio);
+                            client.send("capture_progress", new JSONObject().put("run_id", runId).put("capture", data));
+                            lastCaptureProgress = key;
+                        } catch (JSONException error) { cancel(); problem.setText("Invalid capture diagnostics; retry"); }
+                    }
+                }
             }); }
             @Override public void measured(double[][] pairs) { main.post(() -> {
                 if (!foreground || capture != source[0] || !connected) return;
@@ -214,6 +243,7 @@ public final class MainActivity extends Activity {
                     JSONArray rows = new JSONArray();
                     for (double[] pair : pairs) rows.put(new JSONObject().put("gap_ms", pair[0]).put("uncertainty_ms", pair[1]));
                     client.send("complete", new JSONObject().put("run_id", runId).put("pairs", rows));
+                    Log.i("DTCalibration", "six_matched_pairs_submitted");
                     progress.setText("Six pairs captured. Waiting for Windows to pause and validate the result…");
                 } catch (JSONException error) { cancel(); problem.setText("Invalid measurement; retry"); }
             }); }
@@ -225,7 +255,7 @@ public final class MainActivity extends Activity {
         capture = source[0]; source[0].start();
     }
 
-    private boolean active() { return Arrays.asList("preparing", "playing", "finishing").contains(remoteState); }
+    private boolean active() { return Arrays.asList("preparing", "playing", "awaiting_capture", "finishing").contains(remoteState); }
     private void apply() {
         if (!connected || !remoteState.equals("measured")) return;
         try { problem.setText(""); client.send("apply", new JSONObject().put("run_id", runId)); }

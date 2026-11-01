@@ -10,6 +10,8 @@ DualTheater plays the **video on an Android TV or Google TV** using its native h
 
 ## Branch builds
 
+**Local unreleased calibration fix:** `fix/calibration-capture` uses host/TV source 0.6.1-beta.1 and phone 0.1.2-beta.1. It adds numeric capture diagnostics and bounded completion handling after normal reference EOF. It is not included in the published downloads below. The TV timing protocol is unchanged; local testing can retain the v0.6.0 Robust Sync TV app. See [calibration troubleshooting](docs/phone-calibration.md#capture-diagnostics-and-reference-completion).
+
 All three build lines are published separately. The commit column identifies the source used for the attached assets; later documentation commits can advance the branch. New feature releases include BUILD-INFO.json with the complete branch/commit/CI/asset mapping. Use the Windows and TV apps from the same row and run only one Windows host at a time. Main retains the original timing implementation; experimental changes have not been merged into it.
 
 | Branch | Prerelease | Build commit | Downloads |

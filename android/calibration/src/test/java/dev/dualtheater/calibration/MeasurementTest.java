@@ -5,6 +5,23 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class MeasurementTest {
+    @Test public void captureDiagnosticsExposeOnlyRelativeNumericEvents() {
+        MeasurementEngine engine = new MeasurementEngine();
+        long origin = 8_000_000_000_000L;
+        for (int i = 0; i < 22; i++) engine.frame(10, origin+i*20_000_000L, origin+i*20_000_000L+2_000_000L);
+        engine.begin();
+        engine.frame(200, origin+440_000_000L, origin+442_000_000L);
+        engine.tone(origin+500_000_000L, origin+510_000_000L);
+        engine.tone(origin+700_000_000L, origin+710_000_000L);
+        MeasurementEngine.Diagnostics data = engine.diagnostics();
+        assertEquals(1, data.flashes); assertEquals(2, data.beeps);
+        assertArrayEquals(new double[]{0}, data.flashOnsetsMs, .001);
+        assertArrayEquals(new double[]{0,200}, data.beepOnsetsMs, .001);
+        assertFalse(data.summary().contains(Long.toString(origin)));
+        engine.begin();
+        assertEquals(0,engine.diagnostics().flashes);
+        assertEquals(0,engine.diagnostics().beeps);
+    }
     @Test public void audioSamplesUseCaptureAnchorsIncludingClockDrift() {
         AudioTimeline timeline = new AudioTimeline();
         long base = 5_000_000_000_000L;

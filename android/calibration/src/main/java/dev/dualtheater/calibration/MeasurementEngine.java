@@ -23,6 +23,27 @@ final class MeasurementEngine {
     synchronized int flashCount() { return flashes.size(); }
     synchronized int toneCount() { return tones.size(); }
 
+    static final class Diagnostics {
+        final int flashes, beeps;
+        final double[] flashOnsetsMs, beepOnsetsMs;
+        Diagnostics(List<Event> video, List<Event> audio) {
+            flashes = video.size(); beeps = audio.size();
+            flashOnsetsMs = relative(video); beepOnsetsMs = relative(audio);
+        }
+        private static double[] relative(List<Event> events) {
+            double[] values = new double[events.size()];
+            for (int i = 0; i < values.length; i++)
+                values[i] = events.get(i).middleMs() - events.get(0).middleMs();
+            return values;
+        }
+        String summary() {
+            return "flashes=" + flashes + " beeps=" + beeps
+                + " flash_onsets_ms=" + java.util.Arrays.toString(flashOnsetsMs)
+                + " beep_onsets_ms=" + java.util.Arrays.toString(beepOnsetsMs);
+        }
+    }
+    synchronized Diagnostics diagnostics() { return new Diagnostics(flashes, tones); }
+
     synchronized void frame(double luminance, long exposureStart, long exposureEnd) {
         if (!Double.isFinite(luminance) || exposureStart <= 0 || exposureEnd < exposureStart)
             throw new IllegalStateException("Invalid camera exposure metadata");

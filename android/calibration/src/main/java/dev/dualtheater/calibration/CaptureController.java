@@ -12,6 +12,7 @@ import android.media.*;
 import android.os.*;
 import android.util.Range;
 import android.util.Size;
+import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
 import java.nio.ByteBuffer;
@@ -22,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class CaptureController implements AutoCloseable {
     interface Listener {
         void ready();
-        void progress(int flashes, int tones);
+        void progress(MeasurementEngine.Diagnostics diagnostics);
         void measured(double[][] pairs);
         void error(String reason);
     }
@@ -46,6 +47,7 @@ final class CaptureController implements AutoCloseable {
     private Rect activeArray;
     private volatile boolean closed, collecting, exposureLocked;
     private long lockAfterNs, openedNs, beginNs, lastProgress;
+    private int loggedFlashes = -1, loggedBeeps = -1;
 
     CaptureController(Context context, TextureView preview, Listener listener) {
         this.context = context; this.preview = preview; this.listener = listener;
@@ -246,6 +248,7 @@ final class CaptureController implements AutoCloseable {
     void begin() {
         if (!ready.get()) throw new IllegalStateException("Capture is not ready");
         engine.begin(); beginNs = SystemClock.elapsedRealtimeNanos(); collecting = true;
+        Log.i("DTCalibration", "capture_started; exposure and capture clocks ready");
     }
 
     private synchronized void update() {
@@ -254,18 +257,32 @@ final class CaptureController implements AutoCloseable {
         long now = SystemClock.elapsedRealtimeNanos();
         if (now - lastProgress < 250_000_000L) return;
         lastProgress = now;
-        listener.progress(engine.flashCount(), engine.toneCount());
+        MeasurementEngine.Diagnostics diagnostics = engine.diagnostics();
+        if (diagnostics.flashes != loggedFlashes || diagnostics.beeps != loggedBeeps) {
+            loggedFlashes = diagnostics.flashes; loggedBeeps = diagnostics.beeps;
+            Log.i("DTCalibration", "capture_progress " + diagnostics.summary());
+        }
+        listener.progress(diagnostics);
         if (collecting) {
             if (now - beginNs > 75_000_000_000L) { fail("Test timed out; center the TV and retry"); return; }
             double[][] pairs = engine.pairs();
-            if (pairs != null && delivered.compareAndSet(false, true)) { collecting = false; listener.measured(pairs); }
+            if (pairs != null && delivered.compareAndSet(false, true)) {
+                Log.i("DTCalibration", "six_cue_match_complete " + diagnostics.summary());
+                collecting = false; listener.measured(pairs);
+            }
         }
     }
 
-    private void fail(String reason) { if (!closed && failed.compareAndSet(false, true)) listener.error(reason); }
+    private void fail(String reason) {
+        if (!closed && failed.compareAndSet(false, true)) {
+            Log.w("DTCalibration", "capture_failed: " + reason + "; " + engine.diagnostics().summary());
+            listener.error(reason);
+        }
+    }
 
     @Override public void close() {
         closed = true;
+        Log.i("DTCalibration", "capture_closed " + engine.diagnostics().summary());
         synchronized (resources) {
             if (audio != null) { try { audio.stop(); } catch (Exception ignored) {} audio.release(); audio = null; }
             if (session != null) session.close();

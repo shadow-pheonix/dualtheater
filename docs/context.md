@@ -1,6 +1,6 @@
 # DualTheater project context
 
-Last updated: 2026-10-30 (UTC).
+Last updated: 2026-11-02 (Asia/Calcutta).
 
 This is the shared handoff for Codex sessions. Read it before starting work, then inspect the current repository and applicable `AGENTS.md` instructions. **Keeping this file current is mandatory:** update it after meaningful milestones, decisions, tests or blockers, and before a substantive handoff or publication. See [the full update rules](../AGENTS.md).
 
@@ -33,6 +33,18 @@ Build provenance (distinct from later branch documentation heads):
 All Windows Python checks passed without skips: 46 main, 66 preview and 85 Robust Sync. Source ZIP contents match their pinned commits under Windows checkout line-ending conversion. BUILD-INFO.json in each feature release records the original CI payload hashes; its full public manifest also covers that build-info file. Main has no phone APK. Later documentation-only changes do not alter binaries or tags.
 
 ## Current public state
+
+### Local calibration diagnosis/fix — 2026-11-02
+
+Active local branch: `fix/calibration-capture`, based on Robust Sync `cd2e8f1`. Main's local review/hardware notes and unfinished subtitle draft were preserved in a named Git stash before switching; do not discard that stash or treat subtitles as implemented. The user requires **terminal-only operations**; use CLI, ADB and authenticated localhost APIs. No computer-use/native GUI automation.
+
+User observations: main at zero lead showed slightly late video; Robust Sync audio-clock mode looked better. Both terminal hosts used their separately verified official source ZIPs and the same known-working mpv/HDMI endpoint. Robust Sync software reported TrueHD 7.1 and a locked TV clock; these do not establish physical accuracy. Older TV/phone APKs and private app data were backed up locally before debug-certificate replacements. Keep all raw logs, private settings and device/network details outside this repository.
+
+The user attempted phone calibration twice. The host received no complete result and reported `Playback changed during capture` when the reference reached normal EOF; no offset was applied. This misleading normal-end rejection was reproduced with simulated endpoints. The shipped phone v0.1.1 emits no detector diagnostics, so historical logcat cannot reveal whether flashes, beeps or cue matching failed. Do not guess the detector failure or ask the user to reconstruct unavailable counters.
+
+Local unreleased versions: host/TV source `0.6.1-beta.1` (TV code 11), phone `0.1.2-beta.1` (code 3). The fix recognizes only the owned reference's normal EOF epoch transition and waits at most three seconds for completion. Seek/pause/session/offset/context changes still reject a run; late, incomplete or uncertain results cannot be applied. Negotiated, bounded numeric capture telemetry and the `DTCalibration` logcat tag report counts and relative onset intervals; recordings and arbitrary extra fields are excluded. Old hosts remain compatible with the new phone because telemetry is sent only when advertised. The TV timing protocol/code is unchanged; the local patched host can use the installed Robust Sync v0.6.0 TV.
+
+Verification so far: all **90 host tests passed without skips** using configured real mpv/null output, including 15 calibration tests and the new end-of-reference, delayed-result, manual-pause, ownership, monotonic-count and privacy regressions. The phone APK built, all **12 JVM tests passed**, and lint completed with zero errors (15 existing/localization warnings in the initial diagnostic build). APK signature/package identity and 67 documentation links/anchors verified. Published artifacts remain unchanged. Next: install the local diagnostic phone patch preserving pairing, restart the CLI host with its existing private profile, and inspect numeric logs during one user-operated capture. The actual detector/matching failure and a successful physical calibration remain unverified; the reproduced normal-EOF rejection is fixed in software tests only.
 
 ### Published desktop beta 0.4.1-beta.1
 

@@ -25,6 +25,21 @@ For a build comparison, select the desired mode on Windows **Connect** while dis
 
 The reference is original SDR H.264 with stereo TrueHD and **no Atmos**. It exercises the normal compressed-audio path but does not prove HDR/Atmos reception or identical latency for every movie. Keep TV/receiver modes consistent and check the actual movie afterward.
 
+## Capture diagnostics and reference completion
+
+The local unreleased phone 0.1.2/host 0.6.1 update adds diagnostic event counts and relative onset intervals. It does not record frames or PCM. During capture, the patched host's `phone_calibration.capture` status contains allowlisted `flashes`, `beeps`, `flash_onsets_ms` and `beep_onsets_ms`; onset arrays are relative to the first event of each stream and cannot themselves measure sound/light offset. Older hosts do not receive these optional messages. Only a complete matched six-pair result may become a measurement, and Apply remains explicit.
+
+Normal reference EOF enters `awaiting_capture` for at most three seconds. A complete result arriving in that window is validated before pausing/measuring; incomplete capture reports detector counts instead of claiming that the user changed playback. Manual pause/seek, reconnect, offset/context changes and stale run IDs still invalidate results. This grace period does not relax capture-accuracy thresholds.
+
+For terminal diagnosis, use the phone's own ADB address and filter the app tag:
+
+```powershell
+$phoneAdbAddress = 'PHONE_ADB_IP:PORT'
+adb -s $phoneAdbAddress logcat -d -v time -s DTCalibration:I '*:S'
+```
+
+The tag records numeric detector progress, completion and capture errors; it contains no recordings, pairing tokens or media filenames. A missing-beep/flash count is evidence to investigate that stream, not permission to synthesize events or apply a guessed offset. Leave the app in the foreground throughout capture. Published phone 0.1.1 does not contain this logging, so old failures cannot be reconstructed from logcat alone.
+
 ## Timing and accuracy
 
 Camera2 must report REALTIME timestamps, exposure-lock support and usable exposure/rolling-shutter metadata. Images match capture metadata by timestamp. The center-region flash onset is bracketed using exposure intervals; image callback arrival time is not event time.
