@@ -34,6 +34,12 @@ All Windows Python checks passed without skips: 46 main, 66 preview and 85 Robus
 
 ## Current public state
 
+### Local phone preview fix — 2026-11-02
+
+Active checkout/branch remains `fix/calibration-capture`; current local host/TV is **0.6.2-beta.1**, phone **0.1.3-beta.1** (phone code 4). User screenshots showed an incorrectly oriented/stretched camera preview. Camera2 fed a full-panel TextureView without display-rotation or aspect correction. The phone now reverses the default stretch, fits the complete sensor-oriented image, compensates display rotation and updates on view/display changes, including 180-degree flips. Sensor landscape permits either landscape direction. The guide maps the existing central 20% x 10% raw analysis region into the preview; image analysis and camera/audio timestamp/matching logic are unchanged. Implementation references official Camera2 preview guidance. No Windows/TV code or saved offset was changed for this phone-only task.
+
+Phone assembly and all **16 JVM tests passed**. Four new geometry regressions cover all 16 sensor/display quarter-turn combinations across three panel shapes, pixel aspect/fit, opposite-landscape rotation, guide geometry and invalid sizes; the existing measurement tests also ran. Lint completed with zero errors and 15 warnings. APK signature/package/version checks passed. The existing phone APK and pairing preferences were backed up privately; v0.1.3 was installed through ADB and launched, with preference file contents verified identical after update. Capture still starts only on the user's Start action. No GUI automation or new calibration/Apply was performed. Live camera orientation still needs user confirmation; geometry tests are not a substitute for viewing the phone preview. Keep screenshots, backups and device addresses private. This is a new local APK version, not an overwrite of any locked/published build.
+
 ### Local calibration diagnosis/fix — 2026-11-02
 
 Active local branch: `fix/calibration-capture`, based on Robust Sync `cd2e8f1`. Main's local review/hardware notes and unfinished subtitle draft were preserved in a named Git stash before switching; do not discard that stash or treat subtitles as implemented. The user requires **terminal-only operations**; use CLI, ADB and authenticated localhost APIs. No computer-use/native GUI automation.

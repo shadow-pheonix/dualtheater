@@ -25,6 +25,12 @@ For a build comparison, select the desired mode on Windows **Connect** while dis
 
 The reference is original SDR H.264 with stereo TrueHD and **no Atmos**. It exercises the normal compressed-audio path but does not prove HDR/Atmos reception or identical latency for every movie. Keep TV/receiver modes consistent and check the actual movie afterward.
 
+### Local preview orientation fix
+
+Unreleased phone **0.1.3-beta.1** corrects display rotation and fits the complete camera image without stretching. Either landscape direction is supported; the preview also updates on display rotation and resizing. Black borders are expected when the camera and panel have different aspect ratios. Center the TV's flash area in the guide, which now follows the actual central sensor region used for detection. Hold the phone steady during measurement. This changes preview presentation only: analysis pixels, capture timestamps, flash/beep matching and saved Windows offsets are unchanged. The published phone downloads do not yet contain this fix.
+
+The implementation follows Android's [Camera2 preview orientation and scaling guidance](https://developer.android.com/media/camera/camera2/camera-preview), retaining the existing timestamped Camera2 capture path.
+
 ## Capture diagnostics and reference completion
 
 The local unreleased phone 0.1.2/host 0.6.1 update adds diagnostic event counts and relative onset intervals. It does not record frames or PCM. During capture, the patched host's `phone_calibration.capture` status contains allowlisted `flashes`, `beeps`, `flash_onsets_ms` and `beep_onsets_ms`; onset arrays are relative to the first event of each stream and cannot themselves measure sound/light offset. Older hosts do not receive these optional messages. Only a complete matched six-pair result may become a measurement, and Apply remains explicit.

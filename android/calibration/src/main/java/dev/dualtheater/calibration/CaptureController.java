@@ -14,7 +14,6 @@ import android.util.Range;
 import android.util.Size;
 import android.util.Log;
 import android.view.Surface;
-import android.view.TextureView;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,7 +27,7 @@ final class CaptureController implements AutoCloseable {
         void error(String reason);
     }
     private final Context context;
-    private final TextureView preview;
+    private final CameraPreview preview;
     private final Listener listener;
     private final MeasurementEngine engine = new MeasurementEngine();
     private final AudioTimeline timeline = new AudioTimeline();
@@ -49,7 +48,7 @@ final class CaptureController implements AutoCloseable {
     private long lockAfterNs, openedNs, beginNs, lastProgress;
     private int loggedFlashes = -1, loggedBeeps = -1;
 
-    CaptureController(Context context, TextureView preview, Listener listener) {
+    CaptureController(Context context, CameraPreview preview, Listener listener) {
         this.context = context; this.preview = preview; this.listener = listener;
     }
 
@@ -97,6 +96,9 @@ final class CaptureController implements AutoCloseable {
                     && (fps == null || range.getUpper() > fps.getUpper())) fps = range;
             }
             if (fps == null) throw new IllegalStateException("A stable 30–60 fps camera mode is required");
+            Integer sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            if (sensorOrientation == null) throw new IllegalStateException("Camera sensor orientation is unavailable");
+            preview.configure(chosen.getWidth(), chosen.getHeight(), sensorOrientation);
             images = ImageReader.newInstance(chosen.getWidth(), chosen.getHeight(), ImageFormat.YUV_420_888, 4);
             images.setOnImageAvailableListener(this::imageAvailable, cameraHandler);
             preview.getSurfaceTexture().setDefaultBufferSize(chosen.getWidth(), chosen.getHeight());

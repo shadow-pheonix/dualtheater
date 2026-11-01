@@ -6,7 +6,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <application android:label="DualTheater Calibration Preview" android:theme="@android:style/Theme.Material.NoActionBar"
         android:allowBackup="false" android:usesCleartextTraffic="true" android:icon="@drawable/icon">
-        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape"
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="sensorLandscape"
             android:configChanges="screenSize|orientation|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

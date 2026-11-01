@@ -21,7 +21,7 @@ public final class MainActivity extends Activity {
     private EditText address, port, code;
     private TextView status, progress, result, problem;
     private Button connectButton, findButton, startButton, cancelButton, applyButton;
-    private TextureView preview;
+    private CameraPreview preview;
     private PhoneClient client;
     private Discovery discovery;
     private CaptureController capture;
@@ -62,17 +62,20 @@ public final class MainActivity extends Activity {
         applyButton = button(panel, "Apply suggested Video lead", this::apply);
         problem = label(panel, "", 15); problem.setTextColor(0xffffb4a8);
         FrameLayout cameraArea = new FrameLayout(this); cameraArea.setBackgroundColor(Color.BLACK);
-        preview = new TextureView(this); preview.setAlpha(0f);
+        preview = new CameraPreview(this); preview.setAlpha(0f);
         cameraArea.addView(preview, new FrameLayout.LayoutParams(-1, -1));
-        cameraArea.addView(new View(this) {
+        View guide = new View(this) {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final android.graphics.RectF bounds = new android.graphics.RectF();
             @Override protected void onDraw(Canvas canvas) {
                 paint.setColor(0xff44dfcd); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2));
-                canvas.drawRect(getWidth() * .4f, getHeight() * .45f, getWidth() * .6f, getHeight() * .55f, paint);
+                preview.guideBounds(bounds); canvas.drawRect(bounds, paint);
                 paint.setStyle(Paint.Style.FILL); paint.setTextSize(dp(15));
                 canvas.drawText("Center the TV flash area here", dp(12), dp(30), paint);
             }
-        }, new FrameLayout.LayoutParams(-1, -1));
+        };
+        preview.setGeometryChanged(guide::invalidate);
+        cameraArea.addView(guide, new FrameLayout.LayoutParams(-1, -1));
         layout.addView(cameraArea, new LinearLayout.LayoutParams(0, -1, 1));
         setContentView(layout); controls();
     }
