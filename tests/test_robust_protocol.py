@@ -23,6 +23,9 @@ class TimingTV:
         self.reader = self.sock.makefile('rb')
         self.lock = threading.Lock()
         self.closed = False; self.timing = None; self.speed_commands = 0
+        self.reply_delay = 0
+        self.reply_started = threading.Event()
+        self.reply_finished = threading.Event()
         self.offset = 8_000_000_000; self.epoch = 0; self.position = 0
         self.started = ns(); self.playing = False; self.state = 'idle'; self.armed = None
         self.anchor = None; self.frame_sequence = 0; self.mode = ''; self.speed = 1
@@ -48,7 +51,18 @@ class TimingTV:
                 m = json.loads(raw)
                 if m['op'] == 'ping':
                     now = ns() + self.offset
-                    self.timing.sendall((json.dumps({'op': 'pong', 't0': m['t0'], 't1': now, 't2': now}) + '\n').encode())
+                    reply = (json.dumps({'op': 'pong', 't0': m['t0'], 't1': now, 't2': now}) + '\n').encode()
+                    delay, self.reply_delay = self.reply_delay, 0
+                    if delay:
+                        # Exercise a partial line across the former 500ms read
+                        # deadline, not just a delayed complete packet.
+                        self.timing.sendall(reply[:8])
+                        self.reply_started.set()
+                        time.sleep(delay)
+                        self.timing.sendall(reply[8:])
+                        self.reply_finished.set()
+                    else:
+                        self.timing.sendall(reply)
                 elif m['op'] == 'anchor' and m['epoch'] == self.epoch:
                     self.anchor = m
         except (OSError, ValueError): pass
@@ -146,6 +160,59 @@ class RobustProtocolTests(unittest.TestCase):
             self.app.action({'action': 'play'})
         self.assertTrue(self.app.mpv.paused)
         self.assertEqual(self.app.state, 'error')
+
+    def test_fragmented_delayed_pong_preserves_live_playback_and_calibration(self):
+        self.connect()
+        self.app.action({'action': 'offset', 'milliseconds': 229})
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        link = self.app.peer.timing
+        self.tv.reply_delay = .65
+        self.assertTrue(self.tv.reply_finished.wait(3))
+        self.wait(lambda: self.app.peer.clock.best(ns()) is not None)
+        self.assertIs(self.app.peer.timing, link)
+        self.assertFalse(link.closed)
+        self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.assertEqual(self.app.playback_lead_ms, 229)
+        self.assertFalse(any(c[:2] == ('set_property', 'speed') for c in self.app.mpv.commands))
+
+    def test_stale_pong_is_discarded_without_tearing_down_timing(self):
+        self.connect()
+        link = self.app.peer.timing
+        self.tv.reply_delay = 1.1
+        self.assertTrue(self.tv.reply_finished.wait(3))
+        # A newly accepted exchange proves parsing continued after the old one.
+        after = ns()
+        self.wait(lambda: any(row[3] > after for row in self.app.peer.clock.samples))
+        self.assertFalse(link.closed)
+        self.assertFalse(self.app.peer.closed)
+
+    def test_silent_timing_peer_expires_but_control_remains_connected(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        self.tv.reply_delay = 3.5
+        self.assertTrue(self.tv.reply_started.wait(1))
+        self.wait(lambda: self.app.peer.timing.closed, seconds=4)
+        self.wait(lambda: self.app.state == 'error')
+        self.assertTrue(self.app.mpv.paused)
+        self.assertFalse(self.app.peer.closed)
+
+    def test_timing_write_failure_does_not_close_control_channel(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        link = self.app.peer.timing
+        original_send = link.send
+        def fail_ping(message):
+            if message.get('op') == 'ping':
+                raise TimeoutError('simulated blocked timing writer')
+            return original_send(message)
+        link.send = fail_ping
+        self.wait(lambda: self.app.state == 'error')
+        self.assertTrue(link.closed)
+        self.assertTrue(self.app.mpv.paused)
+        self.assertFalse(self.app.peer.closed)
 
     def test_pair_code_cannot_open_timing_role_and_profiles_are_mode_specific(self):
         self.connect()

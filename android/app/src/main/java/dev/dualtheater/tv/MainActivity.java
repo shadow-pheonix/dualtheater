@@ -700,6 +700,7 @@ public final class MainActivity extends Activity {
             long now = System.nanoTime();
             if (syncMode.equals("audio-clock")) s.put("remote_clock", new JSONObject()
                 .put("state", audioTimeline.state(now)).put("phase_error_ms", audioTimeline.phaseMs())
+                .put("max_dispatch_delay_ms", audioTimeline.maxDispatchDelayMs())
                 .put("uncertainty_ms", audioTimeline.uncertaintyMs(now))
                 .put("reads_recent", audioClockRenderer.recentlyRead(now))
                 .put("renderer_error_ms", audioClockRenderer.rendererErrorMs()));

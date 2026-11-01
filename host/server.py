@@ -103,7 +103,10 @@ class TimingLink:
     """One TV-session-bound duplex timing stream; no transport commands."""
     def __init__(self, sock):
         self.sock = sock
-        self.sock.settimeout(.5)
+        # This is transport liveness, not permission to extrapolate stale audio.
+        # A delayed pong must not destroy an otherwise healthy duplex session.
+        # Audio-anchor expiry/clock uncertainty still stop playback separately.
+        self.sock.settimeout(3)
         self.lock = threading.Lock()
         self.closed = False
 
@@ -572,7 +575,12 @@ class Coordinator:
                     if self.sync_mode == 'baseline':
                         p.send({'op': 'ping', 't0': ns()})
                     elif p.timing and not p.timing.closed:
-                        p.timing.send({'op': 'ping'})
+                        try:
+                            p.timing.send({'op': 'ping'})
+                        except OSError as problem:
+                            p.timing.close()
+                            self.log('Timing send failed: ' + type(problem).__name__)
+                            self.timing_error = 'Dedicated timing connection lost; reconnect and reload'
                     if p.remote_controls:
                         p.send(self.playback_status())
                 except OSError:
@@ -852,6 +860,7 @@ class ControlHandler(socketserver.StreamRequestHandler):
 
     def handle_timing(self, hello):
         app, link = self.server.app, None
+        reason = 'session_closed'
         peer = app.peer
         if (not peer or peer.closed or app.sync_mode == 'baseline' or not peer.timing_protocol
             or not isinstance(hello.get('token'), str)
@@ -869,19 +878,27 @@ class ControlHandler(socketserver.StreamRequestHandler):
             while not app.stop.is_set() and app.peer is peer and not peer.closed:
                 raw = self.rfile.readline(4097)
                 if not raw or len(raw) > 4096:
+                    reason = 'eof' if not raw else 'oversized_frame'
                     break
                 t3 = ns()
                 msg = json.loads(raw)
                 if msg.get('op') != 'pong':
+                    reason = 'unexpected_operation'
                     break
-                # Reject unsolicited future exchanges as well as replay.
-                if not t3 - 1_000_000_000 <= msg.get('t0', -1) <= t3:
+                t0 = msg.get('t0')
+                if type(t0) is not int or t0 > t3:
+                    reason = 'invalid_reply'
                     break
+                # TCP can deliver old replies after a brief network stall. They
+                # are unusable clock observations, not a broken connection.
+                if t0 < t3 - 1_000_000_000:
+                    continue
                 peer.clock.add(msg['t0'], msg['t1'], msg['t2'], t3)
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
+        except (OSError, ValueError, KeyError, TypeError) as problem:
+            reason = type(problem).__name__
         finally:
             link.close()
+            app.log('Timing connection closed: ' + reason)
             if app.peer is peer and app.audio_running.is_set():
                 app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
 

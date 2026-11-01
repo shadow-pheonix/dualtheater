@@ -4,6 +4,28 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class RemoteTimelineTest {
+    @Test public void delayedTimingThreadCannotCreateFalsePhaseJump() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        t.arm(1, 0, start, start, 0, 0); t.start(start);
+        assertTrue(t.accept(1, 1, start, 0, 1, 1, start));
+        // Receipt was timestamped before parsing/lock acquisition. Meanwhile
+        // the renderer has already advanced the same clock on another thread.
+        t.read(start + 400_000_000L);
+        assertTrue(t.accept(1, 2, start + 40_000_000L, 40_000, 1, 1, start + 50_000_000L));
+        assertEquals("holdover", t.state(start + 400_000_000L));
+        assertEquals(400_000, t.read(start + 400_000_000L), 1);
+        assertEquals(0, t.phaseMs(), .001);
+    }
+
+    @Test public void delayedProcessingDoesNotMakeOldAnchorFresh() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        t.arm(1, 0, start, start, 0, 0); t.start(start);
+        assertTrue(t.accept(1, 1, start, 0, 1, 1, start));
+        t.read(start + 600_000_000L);
+        assertFalse(t.accept(1, 2, start + 40_000_000L, 40_000, 1, 1, start + 50_000_000L));
+        assertEquals("holdover", t.state(start + 600_000_000L));
+    }
+
     @Test public void positiveTwoSecondLeadDoesNotExpireBeforeAudioStarts() {
         RemoteTimeline t = new RemoteTimeline(); long video = 1_000_000_000L, audio = 3_000_000_000L;
         t.arm(1, 0, audio, video, 2_000_000, 0); t.start(video);

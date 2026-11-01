@@ -3,13 +3,14 @@ package dev.dualtheater.tv;
 /** Pure monotonic clock discipline. All positions are media us, times nanoTime ns. */
 final class RemoteTimeline {
     private long epoch, sequence, lastNs, positionUs, anchorNs, anchorUs, receivedNs;
-    private double rate = 1, uncertaintyMs, phaseMs;
+    private double rate = 1, uncertaintyMs, phaseMs, maxDispatchDelayMs;
     private boolean running, armed, observed;
     private String fault = "";
 
     synchronized void reset(long newEpoch, long position, long now) {
         epoch = newEpoch; sequence = 0; running = armed = observed = false;
         positionUs = position; lastNs = now; receivedNs = 0; rate = 1; fault = ""; phaseMs = 0;
+        maxDispatchDelayMs = 0;
     }
 
     synchronized void resetPosition(long position, long now) {
@@ -28,18 +29,24 @@ final class RemoteTimeline {
 
     synchronized boolean accept(long wantedEpoch, long seq, long timeNs, long mediaUs,
                                 double newRate, double uncertainty, long now) {
+        // Receipt is timestamped on the network thread before parsing and taking
+        // this lock. The renderer may have advanced lastNs in the meantime.
+        // Compare both positions at the same time; never rewind the clock or
+        // treat a delayed thread's old receipt time as a new phase jump.
+        long evaluationNs = Math.max(now, lastNs);
         if (wantedEpoch != epoch || seq <= sequence || !armed || !Double.isFinite(newRate)
             || newRate < .998 || newRate > 1.002 || !Double.isFinite(uncertainty)
-            || uncertainty < 0 || uncertainty > 20 || now - timeNs > 500_000_000L
+            || uncertainty < 0 || uncertainty > 20 || evaluationNs - timeNs > 500_000_000L
             || timeNs - now > 20_000_000L) return false;
-        read(now);
-        long target = mediaUs + Math.round((now - timeNs) / 1000.0 * newRate);
+        maxDispatchDelayMs = Math.max(maxDispatchDelayMs, (evaluationNs - now) / 1_000_000.0);
+        read(evaluationNs);
+        long target = mediaUs + Math.round((evaluationNs - timeNs) / 1000.0 * newRate);
+        phaseMs = (target - positionUs) / 1000.0;
         if (running && Math.abs(target - positionUs) > 150_000) {
             fault = "audio_phase_jump"; return false;
         }
         sequence = seq; anchorNs = timeNs; anchorUs = mediaUs;
         rate = newRate; uncertaintyMs = uncertainty; receivedNs = now; observed = true;
-        phaseMs = (target - positionUs) / 1000.0;
         return true;
     }
 
@@ -75,6 +82,7 @@ final class RemoteTimeline {
         return Math.abs(phaseMs) <= Math.max(8, uncertaintyMs) ? "locked" : "slewing";
     }
     synchronized double phaseMs() { return phaseMs; }
+    synchronized double maxDispatchDelayMs() { return maxDispatchDelayMs; }
     synchronized double uncertaintyMs(long now) {
         return observed ? uncertaintyMs + Math.max(0, now - receivedNs) / 1e6 * .001 : 1000;
     }

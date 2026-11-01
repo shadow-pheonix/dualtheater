@@ -34,6 +34,14 @@ For a terminal/source host instead of the desktop:
 
 Run one command at a time. Each prompts for the existing mpv/HDMI selection if needed. Direct Python also supports `--sync-mode baseline|servo|audio-clock` and `--data-dir`; the default source-host data directory is the isolated RobustSync profile. Default ports are unchanged: UI TCP 8764, media TCP 8765, control/timing TCP 8766, discovery UDP 8767. Timing uses a second, session-authorized TCP connection on the same listener; no new firewall port is required.
 
+## Local unreleased timing transport fix
+
+The `fix/calibration-capture` host includes a subsequent transport fix compatible with the published Robust Sync TV app. Hardware diagnostics reproduced a host `TimeoutError`: the timing reader's 500 ms deadline closed its TCP session even while TV control/status remained connected. The local host now uses a bounded three-second transport deadline and discards replies older than one second instead of disconnecting. Such replies never update the clock model. Clock-confidence checks and the TV's 750 ms audio-anchor expiry remain unchanged; the longer socket deadline does not allow playback on expired audio timing.
+
+Timing write failures are isolated from the control channel, and bounded reason codes in the local host log identify timing closure without including addresses, tokens or raw messages. A true timing disconnect still requires reconnecting the TV app, reloading the movie and pressing Play. Saved calibration is retained. This behavior is not included in the published release assets.
+
+Local host/TV **0.6.2-beta.1** additionally fixes a TV clock race: an anchor's network receipt timestamp can precede the renderer's latest clock read when parsing or thread scheduling is delayed. Phase comparison now evaluates both media positions at the latest time without rewinding. Freshness uses that evaluation time, while holdover still uses the original receipt time. Genuine phase jumps, expired anchors and the existing speed bounds remain guarded. The local TV status includes numeric `max_dispatch_delay_ms` per epoch. Use the updated TV APK for this fix; it cannot be supplied by a host-only update. The phone remains 0.1.2-beta.1.
+
 ## Compare before calibrating
 
 1. Test the unchanged published/main build first. Record the movie, selected track, TV picture/refresh mode, receiver input/sound mode and whether playback/seek/resume looks synchronized. Keep these details locally; do not publish personal media or addresses.
