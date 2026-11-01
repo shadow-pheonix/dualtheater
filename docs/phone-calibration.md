@@ -46,6 +46,8 @@ adb -s $phoneAdbAddress logcat -d -v time -s DTCalibration:I '*:S'
 
 The tag records numeric detector progress, completion and capture errors; it contains no recordings, pairing tokens or media filenames. A missing-beep/flash count is evidence to investigate that stream, not permission to synthesize events or apply a guessed offset. Leave the app in the foreground throughout capture. Published phone 0.1.1 does not contain this logging, so old failures cannot be reconstructed from logcat alone.
 
+With local host/TV **0.6.3-beta.1**, a lost timing socket reconnects while the main TV connection stays alive. Windows waits up to eight seconds for the current timing connection and a newly acquired clock before replacing media or scheduling playback. If that fails, the phone says **TV timing is unavailable** with retry guidance; a connected TV/control indicator alone is insufficient. Wait for reconnection, then start calibration again. A timing reconnect never automatically resumes the reference or applies an offset. Other preparation failures retain the generic message to avoid sending private paths/device details to the phone; inspect the Windows error in that case. Older TV builds still need a manual TV reconnect and reload.
+
 ## Timing and accuracy
 
 Camera2 must report REALTIME timestamps, exposure-lock support and usable exposure/rolling-shutter metadata. Images match capture metadata by timestamp. The center-region flash onset is bracketed using exposure intervals; image callback arrival time is not event time.

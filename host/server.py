@@ -26,7 +26,7 @@ from .pairing import PairingStore
 from .discovery import DiscoveryServer, DISCOVERY_PORT
 from .diagnostics import SessionDiagnostics, receiver_report
 from .calibration import CalibrationService
-from .timing import AffineClock, AudioTimeline, AdaptiveServo
+from .timing import AffineClock, AudioTimeline, AdaptiveServo, TimingUnavailable
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -328,6 +328,25 @@ class Coordinator:
                 and not s.get('seek_pending', True) and abs(s.get('position_ms', -9999) - position) < 150
                 and self.mpv_ready(position))
 
+    def ensure_timing(self, seconds=8):
+        if self.sync_mode == 'baseline':
+            return
+        p = self.tv()
+        if not p.timing_protocol:
+            raise RuntimeError('This sync mode requires the matching Robust Sync TV app')
+        until = time.monotonic() + seconds
+        while time.monotonic() < until:
+            if self.cancel.is_set() or self.stop.is_set():
+                raise RuntimeError('Operation cancelled')
+            if self.tv() is not p:
+                raise RuntimeError('TV connection changed; reconnect and reload')
+            if p.status.get('error') and p.status.get('timing_error_only') is not True:
+                raise RuntimeError(p.status['error'])
+            if p.timing and not p.timing.closed and p.clock.best(ns()) is not None:
+                return
+            time.sleep(.05)
+        raise TimingUnavailable()
+
     def load(self, path, aid='auto'):
         self.tv()
         media = Path(path).expanduser().resolve(strict=True)
@@ -336,6 +355,7 @@ class Coordinator:
         if not self.args.diagnostic and not self.args.device:
             raise ValueError('Choose an explicit WASAPI HDMI endpoint in Start.ps1 or --device')
         self.pause_both('loading')
+        self.ensure_timing()
         if self.mpv:
             self.mpv.close()
         self.media = media
@@ -373,12 +393,11 @@ class Coordinator:
         if not self.mpv or not self.media:
             raise RuntimeError('Load a file first')
         p = self.tv()
-        if self.sync_mode != 'baseline' and not p.timing_protocol:
-            raise RuntimeError('This sync mode requires the matching Robust Sync TV app')
         if self.sync_mode != 'baseline':
-            self.wait_for(lambda q: q.timing and not q.timing.closed, seconds=5)
+            self.ensure_timing()
             self.timing_error = ''
-        self.wait_for(lambda p: p.clock.best(ns()) is not None, seconds=8)
+        else:
+            self.wait_for(lambda p: p.clock.best(ns()) is not None, seconds=8)
         self.audio_info = self.mpv.verify()
         if not prepared:
             self.prepare(self.anchor_ms)
@@ -873,6 +892,8 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 return
             link = TimingLink(self.request)
             peer.timing = link
+            clock = AffineClock()
+            peer.clock = clock
         try:
             link.send({'op': 'timing_ready', 'version': 2})
             while not app.stop.is_set() and app.peer is peer and not peer.closed:
@@ -893,13 +914,13 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 # are unusable clock observations, not a broken connection.
                 if t0 < t3 - 1_000_000_000:
                     continue
-                peer.clock.add(msg['t0'], msg['t1'], msg['t2'], t3)
+                clock.add(msg['t0'], msg['t1'], msg['t2'], t3)
         except (OSError, ValueError, KeyError, TypeError) as problem:
             reason = type(problem).__name__
         finally:
             link.close()
             app.log('Timing connection closed: ' + reason)
-            if app.peer is peer and app.audio_running.is_set():
+            if app.peer is peer and peer.timing is link and app.audio_running.is_set():
                 app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
 
     def handle_calibration(self, trusted_token):

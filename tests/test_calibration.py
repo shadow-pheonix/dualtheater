@@ -11,6 +11,7 @@ from unittest.mock import patch
 from host.calibration import CUE_TIMES_MS, FIXTURE_SHA256, summarize
 from host.desktop_support import runtime_args
 from host.server import HostRuntime, ROOT
+from host.timing import TimingUnavailable
 import test_core
 
 
@@ -58,6 +59,19 @@ class Phone:
 
 
 class CalibrationProtocolTests(unittest.TestCase):
+    def test_missing_timing_has_actionable_phone_error(self):
+        with patch.object(self.app, 'action', side_effect=TimingUnavailable()):
+            self.assertTrue(self.phone.request('start')['ok'])
+            self.wait(lambda: self.app.calibration.snapshot()['state'] == 'error')
+        self.assertEqual(self.app.calibration.snapshot()['error'], str(TimingUnavailable()))
+        self.assertEqual(self.app.offset_ms, 0)
+
+    def test_unexpected_preparation_errors_do_not_leak_private_details(self):
+        with patch.object(self.app, 'action', side_effect=RuntimeError('private path and credentials')):
+            self.assertTrue(self.phone.request('start')['ok'])
+            self.wait(lambda: self.app.calibration.snapshot()['state'] == 'error')
+        self.assertEqual(self.app.calibration.snapshot()['error'], 'Playback preparation failed; check the Windows app')
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/test', self.directory.name, ephemeral=True, sync_mode='baseline'),

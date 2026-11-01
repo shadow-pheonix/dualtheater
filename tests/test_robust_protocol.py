@@ -8,6 +8,8 @@ import time
 import unittest
 from host.desktop_support import runtime_args
 from host.server import HostRuntime, ns
+from host.timing import TimingUnavailable
+from unittest.mock import patch
 import test_core
 
 
@@ -29,6 +31,7 @@ class TimingTV:
         self.offset = 8_000_000_000; self.epoch = 0; self.position = 0
         self.started = ns(); self.playing = False; self.state = 'idle'; self.armed = None
         self.anchor = None; self.frame_sequence = 0; self.mode = ''; self.speed = 1
+        self.reported_error = ''; self.timing_error_only = False
         self.send({'op': 'hello', 'version': 1, 'token': token, 'timing_protocol': 2})
         threading.Thread(target=self.read, daemon=True).start()
         threading.Thread(target=self.telemetry, daemon=True).start()
@@ -73,6 +76,7 @@ class TimingTV:
                 m = json.loads(raw); op = m['op']
                 if op == 'welcome':
                     self.mode = m['sync_mode']
+                    self.timing_token = m['timing_token']
                     threading.Thread(target=self.timing_read, args=(m['timing_token'],), daemon=True).start(); continue
                 if op in ('coordinator', 'remote_result'): continue
                 if m.get('epoch', 0) < self.epoch: continue
@@ -96,6 +100,7 @@ class TimingTV:
                 self.frame_sequence += 1
                 self.send({'op': 'status', 'epoch': self.epoch, 'state': self.state,
                     'position_ms': self.current(), 'sample_ns': now + self.offset,
+                    'error': self.reported_error, 'timing_error_only': self.timing_error_only,
                     'seek_pending': False, 'playing': self.playing, 'speed': self.speed,
                     'remote_clock': {'state': 'locked', 'reads_recent': self.playing, 'renderer_error_ms': 0},
                     'frame': {'epoch': self.epoch, 'sequence': self.frame_sequence, 'position_ms': self.current(),
@@ -160,6 +165,59 @@ class RobustProtocolTests(unittest.TestCase):
             self.app.action({'action': 'play'})
         self.assertTrue(self.app.mpv.paused)
         self.assertEqual(self.app.state, 'error')
+
+    def test_reconnected_timing_reacquires_clock_and_calibration_can_start(self):
+        import test_calibration
+        self.connect()
+        self.app.action({'action': 'offset', 'milliseconds': 75})
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        old_clock, old_link = self.app.peer.clock, self.app.peer.timing
+        self.tv.close_timing()
+        self.wait(lambda: self.app.state == 'error' and old_link.closed)
+        threading.Thread(target=self.tv.timing_read, args=(self.tv.timing_token,), daemon=True).start()
+        self.wait(lambda: self.app.peer.clock is not old_clock and self.app.peer.clock.best(ns()) is not None)
+        self.assertEqual(self.app.state, 'error')
+        self.assertTrue(self.app.mpv.paused)  # Reconnection never resumes by itself.
+        phone = test_calibration.Phone(self.runtime)
+        try:
+            self.assertTrue(phone.request('start')['ok'])
+            self.wait(lambda: self.app.calibration.snapshot()['state'] == 'playing')
+            run = self.app.calibration.snapshot()['run_id']
+            self.assertTrue(phone.request('complete', run_id=run,
+                pairs=[{'gap_ms': 10, 'uncertainty_ms': 5}] * 6)['ok'])
+            self.wait(lambda: self.app.calibration.snapshot()['state'] == 'measured')
+            self.assertEqual(self.app.offset_ms, 75)
+        finally:
+            phone.close()
+
+    def test_missing_timing_fails_before_replacing_loaded_media(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        old_media, old_mpv = self.app.media, self.app.mpv
+        self.tv.close_timing()
+        self.wait(lambda: self.app.peer.timing.closed)
+        other = Path(self.tmp.name) / 'other.mkv'; other.write_bytes(b'another movie')
+        ensure = self.app.ensure_timing
+        with patch.object(self.app, 'ensure_timing', side_effect=lambda: ensure(seconds=.15)):
+            with self.assertRaises(TimingUnavailable):
+                self.app.action({'action': 'load', 'path': str(other)})
+        self.assertEqual(self.app.media, old_media)
+        self.assertIs(self.app.mpv, old_mpv)
+        self.assertTrue(old_mpv.paused)
+
+    def test_timing_preflight_does_not_ignore_unrelated_tv_errors(self):
+        self.connect()
+        self.tv.close_timing()
+        self.wait(lambda: self.app.peer.timing.closed)
+        self.tv.reported_error = 'decoder failed'
+        self.wait(lambda: self.app.peer.status.get('error') == 'decoder failed')
+        with self.assertRaisesRegex(RuntimeError, 'decoder failed'):
+            self.app.ensure_timing(seconds=.15)
+        self.tv.reported_error = 'timing recovery in progress'; self.tv.timing_error_only = True
+        self.wait(lambda: self.app.peer.status.get('timing_error_only'))
+        with self.assertRaises(TimingUnavailable):
+            self.app.ensure_timing(seconds=.15)
 
     def test_fragmented_delayed_pong_preserves_live_playback_and_calibration(self):
         self.connect()

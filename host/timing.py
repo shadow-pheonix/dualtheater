@@ -9,6 +9,12 @@ from statistics import median
 import threading
 
 
+class TimingUnavailable(RuntimeError):
+    """Allowlisted, actionable preparation error safe to send to the phone."""
+    def __init__(self):
+        super().__init__('TV timing is unavailable. Wait for TV reconnection, then retry calibration or playback.')
+
+
 def numeric(value):
     return type(value) in (int, float) and math.isfinite(value)
 

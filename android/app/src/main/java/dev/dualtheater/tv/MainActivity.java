@@ -44,6 +44,8 @@ public final class MainActivity extends Activity {
     private EditText hostInput, portInput, tokenInput;
     private ControlClient client;
     private TimingClient timingClient;
+    private boolean timingReconnecting;
+    private static final String TIMING_ERROR = "Timing connection lost; reconnecting. Playback remains paused.";
     private final RemoteTimeline audioTimeline = new RemoteTimeline();
     private final FrameObservations observations = new FrameObservations();
     private final java.util.concurrent.atomic.AtomicLong frameSequence = new java.util.concurrent.atomic.AtomicLong();
@@ -546,11 +548,22 @@ public final class MainActivity extends Activity {
                     .setPayload(syncMode.equals("audio-clock")).send();
                 audioTimeline.reset(0, 0, System.nanoTime());
                 if (timingClient != null) timingClient.close();
+                timingReconnecting = !syncMode.equals("baseline");
                 if (!syncMode.equals("baseline")) {
                     final TimingClient timing = new TimingClient(); timingClient = timing;
                     timing.connect(hostInput.getText().toString().trim(), Integer.parseInt(portInput.getText().toString()),
                         msg.getString("timing_token"), audioTimeline, () -> main.post(() -> {
-                            if (timingClient == timing && connected) { error = "Timing connection lost; reconnect and reload"; status(); }
+                            if (timingClient == timing && connected) {
+                                timingReconnecting = false;
+                                if (error.equals(TIMING_ERROR)) error = "";
+                                status();
+                            }
+                        }), () -> main.post(() -> {
+                            if (timingClient == timing && connected) {
+                                timingReconnecting = true;
+                                if (error.isEmpty() || error.equals(TIMING_ERROR)) error = TIMING_ERROR;
+                                status();
+                            }
                         }));
                 }
                 loading = false; seekPending = false; error = ""; decoderName = "";
@@ -697,6 +710,8 @@ public final class MainActivity extends Activity {
                 .put("display_hdr_types", new JSONArray(hdrTypes))
                 .put("decoders", capabilities).put("sample_ns", System.nanoTime())
                 .put("sync_mode", syncMode).put("display_refresh_hz", getWindowManager().getDefaultDisplay().getRefreshRate());
+            s.put("timing_reconnecting", timingReconnecting);
+            s.put("timing_error_only", timingReconnecting && error.equals(TIMING_ERROR));
             long now = System.nanoTime();
             if (syncMode.equals("audio-clock")) s.put("remote_clock", new JSONObject()
                 .put("state", audioTimeline.state(now)).put("phase_error_ms", audioTimeline.phaseMs())

@@ -6,6 +6,7 @@ from pathlib import Path
 import secrets
 import statistics
 import threading
+from .timing import TimingUnavailable
 import time
 
 FIXTURE_ID = 'phone-v1'
@@ -212,6 +213,10 @@ class CalibrationService:
             with self.lock:
                 run.error, run.state = str(error), 'error'
             self.app.log('Calibration rejected: ' + str(error))
+        except TimingUnavailable as error:
+            with self.lock:
+                if not run.stop.is_set():
+                    run.error, run.state = str(error), 'error'
         except Exception:
             with self.lock:
                 if not run.stop.is_set():
