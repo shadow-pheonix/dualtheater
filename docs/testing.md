@@ -4,7 +4,7 @@ Stable **1.0.0** promotes the calibrated audio-clock build after the user report
 
 ## Software verification
 
-The tested pre-promotion candidate passed 99 host tests without skips, 24 TV JVM tests and 16 phone JVM tests, with Android assembly/lint/signature checks (zero lint errors). The 1.0 release verification and CI provenance are recorded in [context](context.md). All older results below are historical.
+Stable 1.0 [release CI](https://github.com/shadow-pheonix/dualtheater/actions/runs/41391703967) passed **101 host tests**, Windows EXE build/frozen smoke, Android assembly/JVM tests and lint. Local 1.0 checks also passed all **40 Android JVM tests** (24 TV, 16 phone), APK signatures/package versions and zero lint errors. All six public downloads were independently verified against GitHub digests, checksums and provenance; source ZIP contents match the release commit. The tested pre-promotion candidate had passed the original 99 host tests; two native PowerShell argument checks were added for stable/beta publication. See [context](context.md) for exact build/tag provenance and device observations. All older results below are historical.
 
 The checks included in 1.0 cover normal-EOF completion grace, late-result expiry, explicit Apply, manual-pause rejection and allowlisted/monotonic event telemetry. Phone tests check that detector diagnostics contain counts and relative event intervals. These checks diagnose failures without accepting partial measurements or establishing physical accuracy; see the current [context](context.md).
 
