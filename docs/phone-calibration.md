@@ -1,11 +1,11 @@
-# DualTheater Calibration Preview — phone client
+# DualTheater Calibration — phone client
 
-Experimental phone version `0.1.1-beta.1` accompanies Windows/TV Robust Sync `0.6.0-beta.1` and remains compatible with the earlier preview protocol. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
+Phone version **1.0.0** accompanies Windows/TV **1.0.0** on `main` and retains the earlier preview package identity for upgrade continuity. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
 
 ## Install and connect
 
-1. Run the matching Windows Robust Sync host and connect **DualTheater TV Robust Sync** normally. Preserve the base apps; published `0.4.1-beta.1` does not support this phone client. Run only one Windows host at a time.
-2. Sideload the phone APK, `calibration-debug.apk` from the module build output or `DualTheater-Calibration-v0.1.1-beta.1-debug.apk` when packaged. Open **DualTheater Calibration Preview**. Android 8 or newer is required. Its package, `dev.dualtheater.calibration.preview`, is separate from the TV/base apps.
+1. Run the matching Windows host and connect **DualTheater TV** normally. Preserve the base apps; published `0.4.1-beta.1` does not support this phone client. Run only one Windows host at a time.
+2. Sideload the phone APK, `calibration-debug.apk` from the module build output or `DualTheater-Calibration-v1.0.0-debug.apk` when packaged. Open **DualTheater Calibration**. Android 8 or newer is required. Its package, `dev.dualtheater.calibration.preview`, is separate from the TV/base apps.
 3. Put the phone, TV and computer on the same trusted LAN. On the phone, press **Find computers**, select the computer, enter the six-digit code shown on Windows **Connect** (or its source-host terminal/browser) and press **Connect**.
 4. Later connections reuse a private per-phone credential; leave the code empty for saved pairing. If discovery is blocked, enter the LAN address and control port manually. Default control TCP 8766 and discovery UDP 8767 are shared with the TV; no additional port is required. The phone has a separate calibration role and does not occupy the TV socket.
 
@@ -13,7 +13,7 @@ Connections retain the project's cleartext, trusted-LAN model. Do not expose the
 
 ## Run and apply
 
-For a build comparison, select the desired mode on Windows **Connect** while disconnected, reconnect/reload and start at zero Video lead. The phone status identifies the mode. Complete a test without Apply to measure first; each mode saves its own correction only after Apply. See the [comparison procedure](robust-sync.md). The unchanged published main host does not support this protocol; use the new branch's baseline mode for the same-clip numerical comparison.
+For a build comparison, select the desired mode on Windows **Connect** while disconnected, reconnect/reload and start at zero Video lead. The phone status identifies the mode. Complete a test without Apply to measure first; each mode saves its own correction only after Apply. See the [comparison procedure](robust-sync.md). Main 1.0 supports the phone; the historical 0.4.1 baseline does not. For a same-clip comparison use 1.0's baseline mode.
 
 1. Position the phone steadily at the listening seat, in landscape, with the TV centered in the camera guide. Keep the room quiet and use the built-in microphone; Bluetooth, USB and headset input are unsupported in v1.
 2. Press **Start calibration / verify again** and grant camera/microphone permissions. This replaces the current movie with the reference clip; reload the movie afterward.
@@ -27,13 +27,15 @@ The reference is original SDR H.264 with stereo TrueHD and **no Atmos**. It exer
 
 ### Local preview orientation fix
 
-Unreleased phone **0.1.3-beta.1** corrects display rotation and fits the complete camera image without stretching. Either landscape direction is supported; the preview also updates on display rotation and resizing. Black borders are expected when the camera and panel have different aspect ratios. Center the TV's flash area in the guide, which now follows the actual central sensor region used for detection. Hold the phone steady during measurement. This changes preview presentation only: analysis pixels, capture timestamps, flash/beep matching and saved Windows offsets are unchanged. The published phone downloads do not yet contain this fix.
+This section describes the preview correction now included in stable 1.0.
+
+Phone **1.0.0** corrects display rotation and fits the complete camera image without stretching. Either landscape direction is supported; the preview also updates on display rotation and resizing. Black borders are expected when the camera and panel have different aspect ratios. Center the TV's flash area in the guide, which now follows the actual central sensor region used for detection. Hold the phone steady during measurement. This changes preview presentation only: analysis pixels, capture timestamps, flash/beep matching and saved Windows offsets are unchanged. The 1.0 phone download contains this fix; older phone releases do not.
 
 The implementation follows Android's [Camera2 preview orientation and scaling guidance](https://developer.android.com/media/camera/camera2/camera-preview), retaining the existing timestamped Camera2 capture path.
 
 ## Capture diagnostics and reference completion
 
-The local unreleased phone 0.1.2/host 0.6.1 update adds diagnostic event counts and relative onset intervals. It does not record frames or PCM. During capture, the patched host's `phone_calibration.capture` status contains allowlisted `flashes`, `beeps`, `flash_onsets_ms` and `beep_onsets_ms`; onset arrays are relative to the first event of each stream and cannot themselves measure sound/light offset. Older hosts do not receive these optional messages. Only a complete matched six-pair result may become a measurement, and Apply remains explicit.
+Stable 1.0 includes diagnostic event counts and relative onset intervals. It does not record frames or PCM. During capture, the patched host's `phone_calibration.capture` status contains allowlisted `flashes`, `beeps`, `flash_onsets_ms` and `beep_onsets_ms`; onset arrays are relative to the first event of each stream and cannot themselves measure sound/light offset. Older hosts do not receive these optional messages. Only a complete matched six-pair result may become a measurement, and Apply remains explicit.
 
 Normal reference EOF enters `awaiting_capture` for at most three seconds. A complete result arriving in that window is validated before pausing/measuring; incomplete capture reports detector counts instead of claiming that the user changed playback. Manual pause/seek, reconnect, offset/context changes and stale run IDs still invalidate results. This grace period does not relax capture-accuracy thresholds.
 
@@ -46,7 +48,7 @@ adb -s $phoneAdbAddress logcat -d -v time -s DTCalibration:I '*:S'
 
 The tag records numeric detector progress, completion and capture errors; it contains no recordings, pairing tokens or media filenames. A missing-beep/flash count is evidence to investigate that stream, not permission to synthesize events or apply a guessed offset. Leave the app in the foreground throughout capture. Published phone 0.1.1 does not contain this logging, so old failures cannot be reconstructed from logcat alone.
 
-With local host/TV **0.6.3-beta.1**, a lost timing socket reconnects while the main TV connection stays alive. Windows waits up to eight seconds for the current timing connection and a newly acquired clock before replacing media or scheduling playback. If that fails, the phone says **TV timing is unavailable** with retry guidance; a connected TV/control indicator alone is insufficient. Wait for reconnection, then start calibration again. A timing reconnect never automatically resumes the reference or applies an offset. Other preparation failures retain the generic message to avoid sending private paths/device details to the phone; inspect the Windows error in that case. Older TV builds still need a manual TV reconnect and reload.
+With host/TV **1.0.0**, a lost timing socket reconnects while the main TV connection stays alive. Windows waits up to eight seconds for the current timing connection and a newly acquired clock before replacing media or scheduling playback. If that fails, the phone says **TV timing is unavailable** with retry guidance; a connected TV/control indicator alone is insufficient. Wait for reconnection, then start calibration again. A timing reconnect never automatically resumes the reference or applies an offset. Other preparation failures retain the generic message to avoid sending private paths/device details to the phone; inspect the Windows error in that case. Older TV builds still need a manual TV reconnect and reload.
 
 ## Timing and accuracy
 

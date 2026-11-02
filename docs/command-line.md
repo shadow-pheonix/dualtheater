@@ -1,6 +1,6 @@
 # Advanced source/command-line guide
 
-The downloads and published-build instructions below describe `0.4.1-beta.1`. Current Robust Sync source `0.6.0-beta.1` supports selectable timing modes and the separate [phone calibration client](phone-calibration.md), with its matching TV app. Source launch defaults to `audio-clock` and the isolated RobustSync app-data directory; use `-SyncMode baseline` or `-SyncMode servo` with `Start.ps1` for comparisons. `Start-Desktop.cmd` opens the native source UI. Follow the [branch-specific guide](robust-sync.md); keep the public/base build intact.
+These commands describe stable **1.0.0** on `main`, including audio-clock synchronization and optional [phone calibration](phone-calibration.md). Source launch defaults to `audio-clock` and `%LOCALAPPDATA%\DualTheater-RobustSync`; use `-SyncMode baseline` or `-SyncMode servo` for advanced comparisons. `Start-Desktop.cmd` opens the native source UI. Keep an existing custom `--data-dir` when updating to retain that profile.
 
 The portable Windows EXE is the recommended interface; see the [main README](../README.md#how-to-use). This optional guide is for running the Python source host. The source ZIP still requires Python and mpv. Do not run it alongside the desktop EXE because both use the same default service ports. ADB is only an optional TV installation method.
 
@@ -8,7 +8,7 @@ The portable Windows EXE is the recommended interface; see the [main README](../
 
 ### 1. Prepare the Windows laptop or desktop PC
 
-Install [Python for Windows](https://www.python.org/downloads/windows/) 3.10 or later and a suitable [Windows mpv build](https://mpv.io/installation/). The host uses only Python's standard library; there is no `pip install` step. The beta was tested with Python 3.11. Extract the mpv distribution and keep its supporting files together. The examples use `C:\Tools\mpv\mpv.exe`; replace that with your own path.
+Install [Python for Windows](https://www.python.org/downloads/windows/) 3.10 or later and a suitable [Windows mpv build](https://mpv.io/installation/). The host uses only Python's standard library; there is no `pip install` step. The host was tested with Python 3.11. Extract the mpv distribution and keep its supporting files together. The examples use `C:\Tools\mpv\mpv.exe`; replace that with your own path.
 
 Connect the computer's HDMI output, or a compatible HDMI adapter on a display-capable USB-C port, to the soundbar/receiver's **HDMI IN** and select that input. The TV will run its own DualTheater app for video. Put the TV and computer on the same trusted home network. Keep the computer awake during playback.
 
@@ -18,19 +18,19 @@ Download the files using the links above, or run this in PowerShell:
 $downloadDir = Join-Path $env:USERPROFILE 'Downloads\DualTheater'
 New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
 Set-Location -LiteralPath $downloadDir
-$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1'
-$files = @('DualTheater-v0.4.1-beta.1.zip', 'DualTheater-TV-v0.4.1-beta.1-debug.apk', 'SHA256SUMS.txt')
+$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0'
+$files = @('DualTheater-v1.0.0.zip', 'DualTheater-TV-v1.0.0-debug.apk', 'SHA256SUMS.txt')
 foreach ($file in $files) {
     Invoke-WebRequest -Uri "$releaseUrl/$file" -OutFile $file
 }
-Get-FileHash .\DualTheater-v0.4.1-beta.1.zip, .\DualTheater-TV-v0.4.1-beta.1-debug.apk -Algorithm SHA256
+Get-FileHash .\DualTheater-v1.0.0.zip, .\DualTheater-TV-v1.0.0-debug.apk -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
 Compare each file's hash with its matching line in `SHA256SUMS.txt`. Then extract into a fresh folder and enter the directory containing `Start.cmd`:
 
 ```powershell
-Expand-Archive -LiteralPath .\DualTheater-v0.4.1-beta.1.zip -DestinationPath .\extracted
+Expand-Archive -LiteralPath .\DualTheater-v1.0.0.zip -DestinationPath .\extracted
 Set-Location .\extracted\dualtheater
 ```
 
@@ -38,7 +38,7 @@ If you downloaded/extracted manually, open PowerShell in the extracted `dualthea
 
 ### 2. Install the TV app
 
-Transfer the APK to the TV and open it with a file manager/package installer, allowing that installer to install apps when the TV asks. Open **DualTheater TV Beta** after installation. TV menu names and available transfer methods vary by device.
+Transfer the APK to the TV and open it with a file manager/package installer, allowing that installer to install apps when the TV asks. Open **DualTheater TV** after installation. TV menu names and available transfer methods vary by device.
 
 Alternatively, use [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) and [ADB](https://developer.android.com/tools/adb) from Windows. The commands below assume `adb` is on PATH. If your TV offers wireless debugging with pairing, enable it in Developer options and use its **pairing address** first:
 
@@ -112,7 +112,7 @@ Allow Python on the private home network if prompted. Discovery uses UDP 8767, c
 | Play or pause | Press the TV remote's middle/OK button, or **Play / resume** / **Pause** in the Windows browser. |
 | Seek with the TV remote | Press left/right for a 10-second preview; hold for a larger jump and release to commit. A seek while paused stays paused. |
 | Seek to an exact time | Enter seconds in **Seek to seconds** in the Windows browser, then press **Seek**. For example, `600` seeks to 10:00. |
-| Change audio language/track | Select a track under **Audio track** and press **Switch track**. Normal mode requires TrueHD output; other codecs are not a supported fallback in this beta. |
+| Change audio language/track | Select a track under **Audio track** and press **Switch track**. Normal mode requires TrueHD output; other codecs are not a supported fallback in this release. |
 | Load another movie | Replace the full media path in the browser, press **Load**, wait for preparation, then **Play / resume**. |
 | Recover after a disturbance | If picture/audio are out of step, try **Resynchronize**. If the connection was lost, reconnect the TV, reload the media and then resume. |
 | Stop the session | Pause playback, then press **Ctrl+C** in the Windows host terminal. Closing just the browser page does not stop the host. |
@@ -121,13 +121,15 @@ The original MKV remains on Windows throughout playback. Keep the host running a
 
 ### Adjust physical lip-sync
 
-Use **Calibrate physical latency** in the Windows browser controller while watching a clear sound/picture event. Increase **Video lead** if sound arrives before the picture; decrease it if sound arrives late. Use the 10 ms buttons or enter a value, press **Save**, then **Resynchronize** to apply a large adjustment immediately. The offset is saved across launches. These controls do not re-encode or change the speed of the TrueHD audio.
+Use **Calibrate physical latency** in the Windows browser controller while watching a clear sound/picture event. Increase **Video lead** if sound arrives before the picture; decrease it if sound arrives late. Use the 10 ms buttons or enter a value, press **Save**, then **Resynchronize** to apply a large adjustment immediately. The offset is saved separately for each timing mode across launches. In audio-clock mode it takes effect at the next coordinated start/resynchronization. These controls do not re-encode or change the speed of the TrueHD audio.
 
-You can load the included `calibration-SDR-TrueHD-no-Atmos.mkv` using its full extracted path for a flash/beep test. It is **SDR with stereo TrueHD, not an HDR/Atmos sample**; confirm the result again with the actual movie and processing modes. Automatic camera/microphone calibration is absent from the published beta; the development branch has a separate [phone client](phone-calibration.md). A dedicated TV calibration screen is not included. Physical sync after start, seek and pause/resume still needs hardware validation.
+You can load the included `calibration-SDR-TrueHD-no-Atmos.mkv` using its full extracted path for a flash/beep test. It is **SDR with stereo TrueHD, not an HDR/Atmos sample**; confirm the result again with the actual movie and processing modes. The optional [phone client](phone-calibration.md) can start the reference, measure flash/beep offset and save a correction after explicit Apply. Reload the movie afterward. A dedicated TV calibration screen is not included. Physical sync after start, seek and pause/resume still needs hardware validation.
+
+If only timing drops, both players pause while timing reconnects; explicitly resume after the clock recovers. A full control reconnect still needs a movie reload.
 
 ### Common setup problems
 
 - **No computers appear on the TV:** check that the host is running, both devices share a trusted LAN, and discovery is not blocked. Try the remembered connection or advanced fields.
 - **No sound, noise or rejected audio:** verify the selected HDMI endpoint/input and cable, close competing exclusive-audio apps and test standalone mpv. Choose an actual TrueHD track; do not use PCM diagnostic mode as evidence of Atmos.
 - **Buffering or repeated resynchronization:** check network throughput and the host's error/status messages. A 100 Mbps TV Ethernet port may be slower than remux peaks. See the [hardware test guide](hardware-test.md).
-- **Installing a later beta:** use a matching host/APK pair, preserve the Windows `pairings.json` and `calibration.json` locally, and follow that release's instructions. A TV signing-certificate change may require uninstall/re-pairing.
+- **Installing a later release:** use a matching host/APK pair, preserve the private profile, including `pairings.json` and the per-mode `calibration-*.json` files, and follow that release's instructions. A TV signing-certificate change may require uninstall/re-pairing.

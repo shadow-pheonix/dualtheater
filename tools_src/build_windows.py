@@ -33,14 +33,18 @@ command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onefile','
 version = re.search(r"__version__ = '([^']+)'", (root/'host/__init__.py').read_text(encoding='utf-8'))[1]
 android_version = re.search(r"versionName '([^']+)'", (root/'android/app/build.gradle').read_text(encoding='utf-8'))[1]
 if version != android_version:
-    raise SystemExit('Windows and Android beta versions must match.')
-numbers = tuple(map(int, re.match(r'(\d+)\.(\d+)\.(\d+)-beta\.(\d+)',version).groups()))
+    raise SystemExit('Windows and Android versions must match.')
+match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?', version)
+if not match:
+    raise SystemExit('Use MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-beta.N versions.')
+numbers = tuple(int(value or 0) for value in match.groups())
+file_flags = 0x2 if match[4] else 0
 metadata = work/'version_info.txt'
 metadata.write_text(f'''VSVersionInfo(
-  ffi=FixedFileInfo(filevers={numbers!r}, prodvers={numbers!r}, mask=0x3f, flags=0x2,
+  ffi=FixedFileInfo(filevers={numbers!r}, prodvers={numbers!r}, mask=0x3f, flags={file_flags},
                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)),
   kids=[StringFileInfo([StringTable('040904B0', [
-    StringStruct('FileDescription', 'DualTheater experimental home theater player'),
+    StringStruct('FileDescription', 'DualTheater home theater player'),
     StringStruct('ProductName', 'DualTheater'), StringStruct('FileVersion', '{version}'),
     StringStruct('ProductVersion', '{version}'), StringStruct('OriginalFilename', 'DualTheater.exe')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])])

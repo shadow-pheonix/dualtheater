@@ -1,12 +1,12 @@
 ---
-name: Experimental beta bug report
+name: Bug report
 about: Report a reproducible problem without private logs or media
 title: ''
 labels: ''
 assignees: ''
 ---
 
-**Beta version and software versions**
+**Release version and software versions**
 
 **TV platform / Android version / optional model**
 
@@ -18,6 +18,6 @@ assignees: ''
 
 **Physical sync observations**
 
-**Optional sanitized diagnostic report** (development branch only: Diagnostics → Export sanitized report)
+**Optional sanitized diagnostic report** (Diagnostics → Export sanitized report)
 
 Remove personal paths, network addresses, endpoint IDs, pairing data and movie names. Do not attach raw personal logs or film files.

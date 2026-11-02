@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DualTheater Robust Sync</title>
+<title>DualTheater</title>
 <style>
 :root{color-scheme:dark;font:16px system-ui;background:#10151c;color:#e5edf5}body{max-width:1000px;margin:40px auto;padding:0 20px}h1{margin-bottom:4px}p{color:#b0bfd0}section{border:1px solid #344151;border-radius:12px;padding:20px;margin:20px 0;background:#18212c}input,select,button{font:inherit;padding:10px;border-radius:7px;border:1px solid #526174;background:#10151c;color:inherit;margin:5px 3px}input.path{width:75%}button{cursor:pointer;background:#254b63}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto;font-size:13px}.badge{padding:5px 12px;border-radius:20px;background:#254b63;display:inline-block}.error{color:#ffb4a8}label{display:inline-block}small{color:#b0bfd0}#numbers{font-size:20px}
 </style>
@@ -16,7 +16,7 @@
 <section><strong>3. Calibrate physical latency</strong><p>Video lead: positive values advance the picture relative to audio. Increase it when a sound is heard before the matching picture. Decrease it when sound is heard late.</p>
 <button onclick="offset(-10)">−10 ms</button><label><input id="offset" type="number" min="-2000" max="2000" value="0"> ms</label><button onclick="offset(10)">+10 ms</button><button onclick="act('offset',{milliseconds:Number(el('offset').value)})">Save</button>
 <p><small>Saved separately for the selected mode. In Audio clock mode, changes take effect at the next coordinated start. Use Resynchronize to apply a saved change now. Small video-speed changes never affect the audio bitstream.</small></p></section>
-<section><strong>Timing and playback evidence</strong><p id="numbers"></p><p id="audio"></p><small>Baseline drift uses scheduled frame release; experimental modes compare media timelines against timestamped audio. It does not measure panel or acoustic latency.</small><details><summary>TV decoder, HDR capabilities and status</summary><pre id="tv"></pre></details><details><summary>Session events</summary><pre id="logs"></pre></details></section>
+<section><strong>Timing and playback evidence</strong><p id="numbers"></p><p id="audio"></p><small>Baseline drift uses scheduled frame release; audio-clock and servo modes compare media timelines against timestamped audio. It does not measure panel or acoustic latency.</small><details><summary>TV decoder, HDR capabilities and status</summary><pre id="tv"></pre></details><details><summary>Session events</summary><pre id="logs"></pre></details></section>
 <section><strong>Shareable diagnostics</strong><p>Export timing statistics, buffer health and operation/recovery counts. Reports exclude movie names, paths, addresses, device identifiers, pairing data and raw logs. Measurements are API estimates, not physical lip-sync or HDR/Atmos proof.</p><button onclick="exportReport()">Export sanitized report</button><details><summary>Report preview</summary><pre id="diagnostics"></pre></details></section>
 <script>
 const token='__TOKEN__',el=id=>document.getElementById(id);let lastTracks='',busy=0,offsetInitialized=false;

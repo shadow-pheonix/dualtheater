@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(0, 0, dp(16), 0); scroll.addView(panel);
         layout.addView(scroll, new LinearLayout.LayoutParams(0, -1, 1.2f));
-        TextView title = label(panel, "DualTheater Calibration Preview", 22);
+        TextView title = label(panel, "DualTheater Calibration", 22);
         title.setPadding(0, 0, 0, dp(8));
         label(panel, "Place the phone at your listening seat and center the TV in the guide. Camera and microphone run only during a test; captures are not saved or uploaded.", 14);
         hostList = new LinearLayout(this); hostList.setOrientation(LinearLayout.VERTICAL); panel.addView(hostList);
@@ -53,7 +53,7 @@ public final class MainActivity extends Activity {
         selectedId = prefs.getString("host_id", ""); selectedAddress = address.getText().toString();
         try { selectedPort = Integer.parseInt(port.getText().toString()); } catch (NumberFormatException ignored) {}
         connectButton = button(panel, "Connect", this::connect);
-        status = label(panel, "Start the matching Windows preview and connect its TV companion first.", 16);
+        status = label(panel, "Start the matching Windows app and connect its TV companion first.", 16);
         label(panel, "Start replaces the current movie with a 22-second SDR/stereo TrueHD test, without Atmos. Keep the camera still and the room quiet. No reference fixture is required.", 14);
         startButton = button(panel, "Start calibration / verify again", this::startCapture);
         cancelButton = button(panel, "Cancel test", this::cancel);
@@ -155,7 +155,7 @@ public final class MainActivity extends Activity {
             if (message.optString("op").equals("welcome")) {
                 captureDiagnostics = message.optBoolean("capture_diagnostics", false);
                 if (connected || !message.optString("role").equals("calibration") || message.optInt("calibration_protocol") != 1)
-                    throw new IllegalStateException("Use the matching Windows preview with phone calibration support");
+                    throw new IllegalStateException("Use the matching Windows app with phone calibration support");
                 String hostId = UUID.fromString(message.getString("host_id")).toString();
                 if (!expectedHost.isEmpty() && !expectedHost.equals(hostId)) throw new IllegalStateException("Computer identity changed; find and pair again");
                 String trusted = message.getString("trusted_token");

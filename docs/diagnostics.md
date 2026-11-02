@@ -1,10 +1,10 @@
-# Playback diagnostics — experimental feature build
+# Playback diagnostics
 
-These separately published features belong to `feature/robust-sync`, version `0.6.0-beta.1`. The public `0.4.1-beta.1` EXE/APK do not contain them. The base build and release assets remain unchanged. Use the [source build instructions](../README.md#build-and-test) to create separate development builds. No TV is required to run the host tests or export an empty session report.
+Diagnostics are included in stable **1.0.0** on `main`. The historical 0.4.1 EXE/APK do not include them. No TV is required to run the host tests or export an empty session report.
 
 ## Native Windows app
 
-The development desktop is labeled **DualTheater Robust Sync** and uses `%LOCALAPPDATA%\DualTheater-RobustSync`. It does not automatically import or modify the base desktop's setup, pairing, calibration, logs or managed player cache. Choose mpv/HDMI and pair once in this profile. Only run one host at a time because the branch and base use the same default ports. The Android candidate is **DualTheater TV Robust Sync**, with a separate application ID (`dev.dualtheater.tv.robustsync`), so it can coexist with the base TV app and its saved pairing settings. Use the matching branch desktop and TV app when testing. Source CLI users can select a separate private profile with `--data-dir`.
+The stable desktop is labeled **DualTheater** and uses `%LOCALAPPDATA%\DualTheater-RobustSync`. It does not automatically import or modify the base desktop's setup, pairing, calibration, logs or managed player cache. Choose mpv/HDMI and pair once in this profile. Only run one host at a time because the branch and base use the same default ports. The TV companion is **DualTheater TV**, with a separate application ID (`dev.dualtheater.tv.robustsync`), so it can coexist with the base TV app and its saved pairing settings. Use the matching 1.0 desktop and TV app. Source CLI users can select a separate private profile with `--data-dir`.
 
 Start the TV connection, then open **Diagnostics**. This additional page shows:
 
@@ -42,4 +42,4 @@ Host tests cover bounded statistics, malformed/non-finite values, private-field 
 
 ## Sync comparison fields
 
-Robust Sync reports identify the selected algorithm, saved/active lead, offset provenance/context, software clock uncertainty/rate and remote-clock state. Experimental drift uses media-timeline observations; baseline drift retains the original scheduled-release basis, so their numerical drift distributions have different semantics. Optional release-to-render samples describe codec/surface feedback, not panel light. Receiver fields expose only allowlisted settings and declared HDMI latencies; total S95TR processing latency remains unknown and no correction is inferred. See [comparison and receiver inspection](robust-sync.md).
+Robust Sync reports identify the selected algorithm, saved/active lead, offset provenance/context, software clock uncertainty/rate and remote-clock state. Audio-clock/servo drift uses media-timeline observations; baseline drift retains the original scheduled-release basis, so their numerical drift distributions have different semantics. Optional release-to-render samples describe codec/surface feedback, not panel light. Receiver fields expose only allowlisted settings and declared HDMI latencies; total S95TR processing latency remains unknown and no correction is inferred. See [comparison and receiver inspection](robust-sync.md).

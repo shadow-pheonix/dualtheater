@@ -1,4 +1,4 @@
-# Experimental beta hardware test
+# Hardware acceptance test
 
 Start with a known compatible HDR10 source and a known TrueHD Atmos track. Confirm that the same Windows PC, HDMI connection and receiver already work with standalone mpv. Keep the TV companion's audio disabled.
 

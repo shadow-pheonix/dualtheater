@@ -37,10 +37,10 @@ class DesktopWindow:
         self.offset_loaded = False
         self.error_text = tk.StringVar(value=self.settings.warning)
         self.mpv_path = tk.StringVar(value=find_mpv(self.settings.values.get('mpv', ''),data_dir=self.directory))
-        self.mode_labels = {'Audio clock (experimental)': 'audio-clock',
-                            'Video servo (experimental)': 'servo', 'Original timing (baseline)': 'baseline'}
+        self.mode_labels = {'Audio clock (recommended)': 'audio-clock',
+                            'Video servo (advanced)': 'servo', 'Original timing (baseline)': 'baseline'}
         saved_mode = self.settings.values.get('sync_mode', 'audio-clock')
-        self.sync_mode = tk.StringVar(value=next((k for k,v in self.mode_labels.items() if v == saved_mode), 'Audio clock (experimental)'))
+        self.sync_mode = tk.StringVar(value=next((k for k,v in self.mode_labels.items() if v == saved_mode), 'Audio clock (recommended)'))
         self.receiver_address = tk.StringVar()
         self.receiver_text = tk.StringVar(value='Receiver processing delay: unmeasured. Inspection does not apply a correction.')
         self.movie_path = tk.StringVar()
@@ -54,7 +54,7 @@ class DesktopWindow:
         self.audio_text = tk.StringVar(value='No movie loaded.')
         self.diagnostic_text = tk.StringVar(value='Start the TV connection to collect session diagnostics.')
         self.export_notice = tk.StringVar()
-        self.root.title(f'DualTheater Robust Sync {VERSION} — Experimental beta')
+        self.root.title(f'DualTheater {VERSION}')
         self.root.geometry('930x790')
         self.root.minsize(800, 610)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
@@ -77,7 +77,7 @@ class DesktopWindow:
             self.brand_image = tk.PhotoImage(file=str(assets / 'dualtheater.png')).subsample(5, 5)
             ttk.Label(heading, image=self.brand_image).pack(side='left', padx=(0, 12))
         ttk.Label(heading, text='DualTheater', style='Title.TLabel').pack(side='left')
-        ttk.Label(outer, text='Native TV picture + HDMI TrueHD audio · Experimental, still testing').pack(anchor='w', pady=(0, 14))
+        ttk.Label(outer, text='Native TV picture + HDMI TrueHD audio').pack(anchor='w', pady=(0, 14))
         self.tabs = ttk.Notebook(outer)
         self.tabs.pack(fill='both', expand=True)
         self.connect = ttk.Frame(self.tabs, padding=18)
@@ -143,7 +143,7 @@ class DesktopWindow:
         ttk.Label(self.connect, textvariable=self.connection_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=6)
         self.pair_label = ttk.Label(self.connect, textvariable=self.pairing_text, style='Code.TLabel', wraplength=790)
         self.pair_label.pack(anchor='w', pady=5)
-        self.note(self.connect, 'On the TV, open DualTheater TV Robust Sync and choose this computer. Enter the code once. Remembered TVs can reconnect automatically.')
+        self.note(self.connect, 'On the TV, open DualTheater TV and choose this computer. Enter the code once. Remembered TVs can reconnect automatically.')
 
     def _player_page(self):
         ttk.Label(self.player, textvariable=self.playback_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=(0, 12))

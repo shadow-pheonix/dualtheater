@@ -1,12 +1,14 @@
-# Beta testing status
+# Testing status
 
-This release is **experimental and still in testing**. Limited successful operation does not establish broad Android TV/Google TV compatibility or stable physical A/V synchronization.
+Stable **1.0.0** promotes the calibrated audio-clock build after the user reported that sync looks perfect on the tested setup. That observation is distinct from instrumented absolute accuracy and broad Android TV/Google TV compatibility. Long-session and additional hardware testing continues.
 
 ## Software verification
 
-Local unreleased calibration-fix checks add normal-EOF completion grace, late-result expiry, explicit Apply, manual-pause rejection and allowlisted/monotonic event telemetry. Phone tests check that detector diagnostics contain counts and relative event intervals. These checks diagnose failures without accepting partial measurements or establishing physical accuracy; see the current [context](context.md).
+The tested pre-promotion candidate passed 99 host tests without skips, 24 TV JVM tests and 16 phone JVM tests, with Android assembly/lint/signature checks (zero lint errors). The 1.0 release verification and CI provenance are recorded in [context](context.md). All older results below are historical.
 
-2026-10-30 publication validation: Windows CI passed **46 main**, **66 preview** and **85 Robust Sync** Python tests without skips, including the configured real-mpv/null-output checks. Each line built and smoke-tested its portable EXE and passed Android assembly/JVM tests/lint. Robust Sync also passed its source-timestamp and CNG AES checks. Published downloads, source commits, signatures and hashes were independently verified. The previous Linux-only results below are historical; actual HDMI/CIM routing and physical TV/phone/S95TR accuracy remain untested. See [branch/release/commit provenance](context.md#branch-publication--completed-2026-10-30).
+The checks included in 1.0 cover normal-EOF completion grace, late-result expiry, explicit Apply, manual-pause rejection and allowlisted/monotonic event telemetry. Phone tests check that detector diagnostics contain counts and relative event intervals. These checks diagnose failures without accepting partial measurements or establishing physical accuracy; see the current [context](context.md).
+
+2026-10-30 publication validation: Windows CI passed **46 main**, **66 preview** and **85 Robust Sync** Python tests without skips, including the configured real-mpv/null-output checks. Each line built and smoke-tested its portable EXE and passed Android assembly/JVM tests/lint. Robust Sync also passed its source-timestamp and CNG AES checks. Published downloads, source commits, signatures and hashes were independently verified. Those results predate the local device tests and user observations recorded above. See [branch/release/commit provenance](context.md#preserved-publication-history).
 
 The experimental `feature/robust-sync` version 0.6.0-beta.1 includes the three-mode comparison engine, source timestamps, dedicated timing transport, remote renderer clock, receiver inspection and optional phone 0.1.1-beta.1. On the Linux development workspace, **79 Python tests passed and six Windows-only tests were skipped (85 total)**. Both Android debug apps assembled; **33 JVM tests passed (22 TV, 11 phone)**. Lint completed with zero errors, 23 TV warnings and 14 phone warnings. APK signatures, package identities and launcher activities were checked. Source/JavaScript syntax, documentation links and archive/privacy verification are recorded in [context](context.md).
 
@@ -26,7 +28,7 @@ Null-output tests do not open an HDMI receiver, decode HDR on a TV or prove acou
 
 ## Limited hardware observations
 
-Simultaneous native TV video decoding and receiver-reported TrueHD Atmos playback have been observed on one Android TV setup. A heap-aware buffer budget corrected an observed allocation failure. A physical HDMI connection issue was also encountered during testing.
+Simultaneous native TV video decoding and receiver-reported TrueHD Atmos playback have been observed on one Android TV setup. The user subsequently reported excellent sync in the calibrated candidate promoted to 1.0. Intentional timing-connection drops recovered safely while retaining control and required explicit resume. A heap-aware buffer budget corrected an observed allocation failure. A physical HDMI connection issue was also encountered during testing.
 
 These observations are intentionally anonymized. No raw device/network logs, private endpoint IDs, movie names, user paths or personal test reports are distributed.
 

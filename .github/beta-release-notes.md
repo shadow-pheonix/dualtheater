@@ -1,23 +1,29 @@
-# Robust Sync comparison build
+# DualTheater 1.0.0 — stable
 
-Branch: `feature/robust-sync`. Compare main baseline **v0.4.1-beta.1** first, then this separate experimental build at zero Video lead before applying phone calibration. No experimental timing has been merged into main.
+The tested audio-clock player is now the main release. After phone calibration and timing-recovery fixes, the user reported that sync looks perfect on the tested setup. This is a single-setup observation; other hardware, HDR profiles, absolute accuracy and whole-film reliability continue to need testing.
 
-Download the Windows x64 EXE and matching TV APK. The EXE includes Python/Tk. Use Download mpv or Browse to the identical runtime and HDMI endpoint used for baseline. Optional phone APK: **0.1.1-beta.1**. Verify assets with SHA256SUMS.txt.
+## Downloads and setup
 
-Select the timing algorithm on Connect while disconnected:
+Download the Windows x64 portable EXE and matching TV APK. Optional: Android phone calibration APK. All three components are version 1.0.0. Verify with SHA256SUMS.txt; BUILD-INFO.json records source commit, CI run and payload hashes. The source ZIP supports terminal operation with Python and mpv.
 
-- **Original timing (baseline):** main's timing algorithm with branch diagnostics/reconnect/phone support.
-- **Video servo (experimental):** source-timestamped audio, affine clock estimation and uncertainty-aware video correction.
-- **Audio clock (experimental):** default; the TV renderer clock follows Windows audio anchors, with startup progress checks and timing-failure pauses.
+1. Connect your Windows laptop/desktop HDMI output (or display-capable USB-C HDMI adapter) to your soundbar/receiver's HDMI IN.
+2. Open the Windows EXE, use **Download mpv** or **Browse…** for your tested player, choose HDMI audio and keep **Audio clock (recommended)** selected.
+3. Start the connection. On **DualTheater TV**, select the computer and enter the six-digit code once.
+4. Choose/load a TrueHD movie on Windows, then Play. TV remote left/right seeks and middle/OK controls coordinated play/pause.
+5. Adjust Video lead manually or use **DualTheater Calibration** on a supported phone. Measure first; Apply is explicit. Reload the movie after a calibration test.
 
-Each mode saves a separate zero-default offset. In Audio clock mode a saved change takes effect at the next coordinated start/resynchronization. Phone measurements can be reviewed without Apply. The SDR/stereo TrueHD reference does not establish identical HDR/Atmos or 4K-load behavior.
+## Included fixes
 
-Settings includes read-only LG S95TR status and Windows HDMI latency inspection. Added AV delay and declared HDMI latency remain separate from unknown total soundbar processing delay; no guessed compensation is applied. The unofficial S95TR protocol and actual route/firmware remain unverified on the user's unit.
+- Source-timestamped audio anchors, remote TV clock and synchronized transport; TrueHD stays compressed at 1.0x and video is not transcoded.
+- Timing timeout/stale-reply handling, TV timestamp-ordering fix, dedicated timing reconnection and fresh-clock preflight before load/start.
+- Safe pause on timing faults; reconnection requires explicit resume. A full control reconnect requires reloading media.
+- Reference-EOF completion grace, numeric detector diagnostics, camera-preview rotation/aspect correction and aligned detection guide.
+- Diagnostics/export and optional read-only receiver/HDMI inspection. Inspection does not infer or automatically apply physical latency.
 
-Windows app: **DualTheater Robust Sync**, private state `%LOCALAPPDATA%\DualTheater-RobustSync`. TV app: **DualTheater TV Robust Sync**, ID `dev.dualtheater.tv.robustsync`, preserving base and preview installations. Phone retains `dev.dualtheater.calibration.preview`; a different CI signing certificate can require uninstall/reinstall and re-pairing. Run one Windows host at a time. Reload media after reconnect or calibration.
+## Updating and limits
 
-Original media, compressed TrueHD and audio 1x are preserved. This remains experimental: no improved physical lip-sync or real TV/phone/S95TR/HDMI accuracy is established. The Windows EXE is unsigned; APKs are development-signed. Use a trusted home LAN. mpv downloads explicitly and is not bundled.
+The tested Robust Sync package IDs and Windows profile are retained: TV `dev.dualtheater.tv.robustsync`, phone `dev.dualtheater.calibration.preview`, Windows `%LOCALAPPDATA%\DualTheater-RobustSync`. Matching signatures retain pairing/settings. APKs are development-signed; CI signing keys are ephemeral, so upgrading a local/older differently signed APK requires uninstall/reinstall and re-pairing. Preserve private Windows profiles. The EXE is unsigned and downloads mpv separately; mpv is not bundled.
 
-[Installation and comparison guide](https://github.com/shadow-pheonix/dualtheater/blob/feature/robust-sync/docs/robust-sync.md) · [Phone guide](https://github.com/shadow-pheonix/dualtheater/blob/feature/robust-sync/docs/phone-calibration.md) · [Research](https://github.com/shadow-pheonix/dualtheater/blob/feature/robust-sync/docs/sync-research.md)
+TV codec/HDR profile support is device-dependent; Dolby Vision Profile 7/FEL reconstruction is not promised. The phone reference is SDR/stereo TrueHD without Atmos and does not establish identical movie-mode latency. Phone camera/microphone absolute bias is unvalidated. Subtitles are not implemented. Use a trusted LAN; no public port forwarding. Previous beta releases/assets remain unchanged.
 
-Build provenance: [`d06248b5d66005e2121b3adc46ebabb22287d5b5`](https://github.com/shadow-pheonix/dualtheater/commit/d06248b5d66005e2121b3adc46ebabb22287d5b5) on `feature/robust-sync`. [Successful Windows/Android CI](https://github.com/shadow-pheonix/dualtheater/actions/runs/41021507447) passed all 85 Windows Python tests, real-mpv/null-output checks, the frozen GUI smoke test, Android assembly/JVM tests and lint. BUILD-INFO.json maps the branch/commit/run to the CI artifact hashes; SHA256SUMS.txt covers every attached payload. No physical playback was tested.
+[Download and operating instructions](https://github.com/shadow-pheonix/dualtheater/blob/main/README.md) · [Terminal commands](https://github.com/shadow-pheonix/dualtheater/blob/main/docs/command-line.md) · [Phone guide](https://github.com/shadow-pheonix/dualtheater/blob/main/docs/phone-calibration.md) · [Testing status](https://github.com/shadow-pheonix/dualtheater/blob/main/docs/testing.md)

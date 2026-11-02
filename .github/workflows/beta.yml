@@ -1,4 +1,4 @@
-name: Test and publish experimental beta
+name: Test and publish DualTheater
 
 on:
   push:
@@ -60,13 +60,13 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0'
       - name: Build, Android tests and lint
         run: .\android\gradlew.bat --project-dir android assembleDebug testDebugUnitTest lintDebug --console=plain
-      - name: Package sanitized source and beta APK
+      - name: Package sanitized source, apps and provenance
         id: package
         shell: pwsh
         run: |
           $text = Get-Content android/app/build.gradle -Raw
           $version = [regex]::Match($text, "versionName '([^']+)'").Groups[1].Value
-          if ($version -notmatch '-beta\.') { throw 'Only beta versions may use this release workflow.' }
+          if ($version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { throw 'Expected a stable or beta semantic version.' }
           "version=$version" >> $env:GITHUB_OUTPUT
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item dist/windows/DualTheater.exe "dist/DualTheater-Windows-v$version-x64.exe"
@@ -77,17 +77,29 @@ jobs:
           Copy-Item android/calibration/build/outputs/apk/debug/calibration-debug.apk "dist/DualTheater-Calibration-v$phoneVersion-debug.apk"
           git archive --format=zip --prefix=dualtheater/ --output="dist/DualTheater-v$version.zip" HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Source archive failed.' }
+          $payloads = @{}
+          Get-ChildItem dist -File | Sort-Object Name | ForEach-Object {
+            $payloads[$_.Name] = @{ sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); size = $_.Length }
+          }
+          @{
+            version = $version; phone_version = $phoneVersion; source_commit = $env:GITHUB_SHA
+            branch = $env:GITHUB_REF_NAME; repository = $env:GITHUB_REPOSITORY
+            workflow_run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            artifacts = $payloads
+            signing = 'Unsigned Windows EXE; development-signed APKs with ephemeral CI debug keys.'
+          } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 dist/BUILD-INFO.json
           Get-ChildItem dist -File | Sort-Object Name | Get-FileHash -Algorithm SHA256 | ForEach-Object {
             '{0}  {1}' -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf)
           } | Set-Content -Encoding utf8 dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: experimental-beta
+          name: dualtheater-release
           path: |
             dist/DualTheater-*.exe
             dist/DualTheater-*.apk
             dist/DualTheater-*.zip
             dist/SHA256SUMS.txt
+            dist/BUILD-INFO.json
           retention-days: 7
 
   publish:
@@ -102,16 +114,17 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: experimental-beta
+          name: dualtheater-release
           path: dist
-      - name: Publish a prerelease without overwriting existing versions
+      - name: Publish without overwriting existing versions
         env:
           GH_TOKEN: ${{ github.token }}
-          BETA_TAG: v${{ needs.validate.outputs.version }}
+          RELEASE_TAG: v${{ needs.validate.outputs.version }}
         shell: pwsh
         run: |
-          gh release view $env:BETA_TAG --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) { Write-Host 'This beta is already published; leaving it unchanged.'; exit 0 }
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host 'This version is already published; leaving it unchanged.'; exit 0 }
           $assets = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
-          gh release create $env:BETA_TAG @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --prerelease --latest=false --title "$env:BETA_TAG - Experimental beta (still testing)" --notes-file .github/beta-release-notes.md
+          $channel = if ($env:RELEASE_TAG -match '-beta\.') { @('--prerelease', '--latest=false') } else { @('--latest') }
+          gh release create $env:RELEASE_TAG @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA @channel --title "DualTheater $env:RELEASE_TAG" --notes-file .github/beta-release-notes.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -333,7 +333,7 @@ class Coordinator:
             return
         p = self.tv()
         if not p.timing_protocol:
-            raise RuntimeError('This sync mode requires the matching Robust Sync TV app')
+            raise RuntimeError('This sync mode requires the matching DualTheater TV app')
         until = time.monotonic() + seconds
         while time.monotonic() < until:
             if self.cancel.is_set() or self.stop.is_set():

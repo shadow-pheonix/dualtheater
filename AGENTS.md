@@ -27,7 +27,7 @@ Verify documented command names, flags, paths, defaults and button labels agains
 
 - Preserve original media bytes, HDR metadata and compressed TrueHD passthrough. Do not introduce transcoding, audio resampling or audio speed changes as a synchronization fix.
 - Route TV transport actions through the Windows coordinator and its shared synchronization barrier. Do not make the TV independently seek or resume.
-- Keep positioning brand-independent, experimental and still in testing. Do not claim universal TV/HDR-profile support or proven physical lip-sync.
+- Keep positioning brand-independent. The user authorized stable 1.0 promotion on 2026-11-02 after reporting excellent sync on the tested setup. Keep that observation distinct from instrumented accuracy or broad compatibility. Do not claim universal TV/HDR-profile support; retain documented hardware and long-session validation limits.
 - Preserve any existing locked release artifacts. Do not overwrite published release versions to ship new behavior.
 - Keep private addresses, personal paths, credentials, endpoint IDs, raw hardware logs and signing keys out of source, context, commits and release assets. Use the configured GitHub noreply identity for public commits; do not retrieve credentials manually.
 - Run checks appropriate to the change. Documentation-only edits need link/content and diff checks, not hardware playback or a fresh application build.

@@ -1,10 +1,10 @@
-# Robust Sync experimental build and comparison
+# Synchronization modes, recovery and comparison
 
-Branch: `feature/robust-sync`, based on main commit `7debf90`. Windows/TV version: **0.6.0-beta.1**. Phone version: **0.1.1-beta.1**. This is a separately published experimental implementation; physical accuracy remains unvalidated. The original `main` and `feature/playback-reliability` builds are preserved.
+The tested Robust Sync implementation is now stable **1.0.0** on `main`, including the phone client. The user reported excellent sync on the calibrated setup. Absolute accuracy, other hardware and long-session behavior remain under testing. Historical base/feature releases are preserved.
 
 ## Install and launch
 
-Keep the published base apps installed. Sideload this build's TV APK and open **DualTheater TV Robust Sync**. Its application ID, `dev.dualtheater.tv.robustsync`, is separate from the base and earlier preview apps. Use the matching Windows host. Only one Windows host can run at a time because service ports and the desktop mutex are shared.
+Keep the published base apps installed. Sideload this build's TV APK and open **DualTheater TV**. Its application ID, `dev.dualtheater.tv.robustsync`, is separate from the base and earlier preview apps. Use the matching Windows host. Only one Windows host can run at a time because service ports and the desktop mutex are shared.
 
 For the source ZIP, install Windows Python 3.10+ with Tk support, extract into a fresh folder and double-click **Start-Desktop.cmd**. Alternatively, run:
 
@@ -14,13 +14,13 @@ python desktop_main.py
 
 The desktop saves setup under `%LOCALAPPDATA%\DualTheater-RobustSync`. It does not import or overwrite either previous profile. Choose the same mpv executable and WASAPI HDMI endpoint used for your baseline test. **Download mpv** is still available; use **Browse…** to select the identical existing runtime for a controlled comparison. Connect the PC to the soundbar's HDMI input as before.
 
-On **Connect**, select a **Sync mode**, then **Start TV connection** and pair the Robust Sync TV app. Disconnect before changing modes. Reload the movie after connecting/reconnecting. The choices are:
+On **Connect**, select a **Sync mode**, then **Start TV connection** and pair the TV app. Disconnect before changing modes. Reload the movie after connecting/reconnecting. The choices are:
 
 | UI choice | Behavior |
 | --- | --- |
-| Original timing (baseline) | Main's lowest-RTT clock filter, frame-release comparison, median/deadband and video-speed servo. Shares branch diagnostics/reconnect/phone support; it is not a byte-identical main build. |
-| Video servo (experimental) | Source-timestamped audio, affine clock estimation, media-timeline comparison and uncertainty-aware phase/frequency correction. Video remains within 0.995–1.005x. |
-| Audio clock (experimental) | Default. A renderer-supplied TV media clock follows timestamped Windows audio anchors. Media3 retains hardware decode and refresh-aware frame scheduling. The host does not run a competing speed servo. |
+| Original timing (baseline) | The original baseline's lowest-RTT clock filter, frame-release comparison, median/deadband and video-speed servo. Shares branch diagnostics/reconnect/phone support; it is not a byte-identical historical 0.4.1 build. |
+| Video servo (advanced) | Source-timestamped audio, affine clock estimation, media-timeline comparison and uncertainty-aware phase/frequency correction. Video remains within 0.995–1.005x. |
+| Audio clock (recommended) | Default. A renderer-supplied TV media clock follows timestamped Windows audio anchors. Media3 retains hardware decode and refresh-aware frame scheduling. The host does not run a competing speed servo. |
 
 Each mode starts with a zero offset and stores its own `calibration-baseline.json`, `calibration-servo.json` or `calibration-audio-clock.json` in private app data. Existing base/preview calibration is not copied. Saved values include manual/phone provenance and the observed media/receiver context. A changed context is flagged on Player; unknown receiver processing delay remains unknown. A saved audio-clock adjustment takes effect at the next coordinated start/resynchronization, rather than jumping the live clock.
 
@@ -34,23 +34,23 @@ For a terminal/source host instead of the desktop:
 
 Run one command at a time. Each prompts for the existing mpv/HDMI selection if needed. Direct Python also supports `--sync-mode baseline|servo|audio-clock` and `--data-dir`; the default source-host data directory is the isolated RobustSync profile. Default ports are unchanged: UI TCP 8764, media TCP 8765, control/timing TCP 8766, discovery UDP 8767. Timing uses a second, session-authorized TCP connection on the same listener; no new firewall port is required.
 
-## Local unreleased timing transport fix
+## Timing reconnection and clock fixes in 1.0
 
-The `fix/calibration-capture` host includes a subsequent transport fix compatible with the published Robust Sync TV app. Hardware diagnostics reproduced a host `TimeoutError`: the timing reader's 500 ms deadline closed its TCP session even while TV control/status remained connected. The local host now uses a bounded three-second transport deadline and discards replies older than one second instead of disconnecting. Such replies never update the clock model. Clock-confidence checks and the TV's 750 ms audio-anchor expiry remain unchanged; the longer socket deadline does not allow playback on expired audio timing.
+Stable 1.0 includes the timing-transport, clock-ordering and reconnection fixes tested in the local 0.6.1–0.6.3 builds. Hardware diagnostics reproduced a host `TimeoutError`: the timing reader's 500 ms deadline closed its TCP session even while TV control/status remained connected. The host uses a bounded three-second transport deadline and discards replies older than one second instead of disconnecting. Such replies never update the clock model. Clock-confidence checks and the TV's 750 ms audio-anchor expiry remain unchanged; the longer socket deadline does not allow playback on expired audio timing.
 
-Timing write failures are isolated from the control channel, and bounded reason codes in the local host log identify timing closure without including addresses, tokens or raw messages. Local **0.6.3-beta.1** TV retries timing within the same authenticated control session, with cancellable backoff from 250 ms to three seconds. The host discards the old timing clock and requires fresh exchanges before load/start; timing recovery alone does not resume playback. Retry calibration or explicitly resume after recovery. A full control disconnect still requires reconnecting/reloading, as do older TV builds after timing loss. Saved calibration is retained. These changes are not included in the published release assets.
+Timing write failures are isolated from the control channel, and bounded reason codes in the local host log identify timing closure without including addresses, tokens or raw messages. The **1.0.0** TV retries timing within the same authenticated control session, with cancellable backoff from 250 ms to three seconds. The host discards the old timing clock and requires fresh exchanges before load/start; timing recovery alone does not resume playback. Retry calibration or explicitly resume after recovery. A full control disconnect still requires reconnecting/reloading, as do older TV builds after timing loss. Saved calibration is retained. These changes are included in the 1.0 host/TV assets.
 
-Local host/TV **0.6.2-beta.1** additionally fixes a TV clock race: an anchor's network receipt timestamp can precede the renderer's latest clock read when parsing or thread scheduling is delayed. Phase comparison now evaluates both media positions at the latest time without rewinding. Freshness uses that evaluation time, while holdover still uses the original receipt time. Genuine phase jumps, expired anchors and the existing speed bounds remain guarded. The local TV status includes numeric `max_dispatch_delay_ms` per epoch. Use the updated TV APK for this fix; it cannot be supplied by a host-only update. The later local phone **0.1.3-beta.1** fixes preview rotation/aspect ratio without changing timing measurement; see [phone operation](phone-calibration.md#local-preview-orientation-fix).
+Stable 1.0 also fixes a TV clock race: an anchor's network receipt timestamp can precede the renderer's latest clock read when parsing or thread scheduling is delayed. Phase comparison now evaluates both media positions at the latest time without rewinding. Freshness uses that evaluation time, while holdover still uses the original receipt time. Genuine phase jumps, expired anchors and the existing speed bounds remain guarded. The local TV status includes numeric `max_dispatch_delay_ms` per epoch. Use the updated TV APK for this fix; it cannot be supplied by a host-only update. Phone **1.0.0** includes the fix to preview rotation/aspect ratio without changing timing measurement; see [phone operation](phone-calibration.md#local-preview-orientation-fix).
 
 ## Compare before calibrating
 
-1. Test the unchanged published/main build first. Record the movie, selected track, TV picture/refresh mode, receiver input/sound mode and whether playback/seek/resume looks synchronized. Keep these details locally; do not publish personal media or addresses.
+1. If comparing older algorithms, test the preserved v0.4.1-beta.1 release first. Record the movie, selected track, TV picture/refresh mode, receiver input/sound mode and whether playback/seek/resume looks synchronized. Keep these details locally; do not publish personal media or addresses.
 2. Close the base Windows host. Start this host, select **Original timing (baseline)**, connect the matching TV app and set **Video lead** to **0** for the initial comparison. Export a sanitized report from **Diagnostics** after a comparable segment.
-3. Disconnect, select **Audio clock (experimental)**, reconnect/reload and repeat at zero lead. Try **Video servo (experimental)** as a separately recorded compatibility comparison. Never silently change algorithms during a measurement.
+3. Disconnect, select **Audio clock (recommended)**, reconnect/reload and repeat at zero lead. Try **Video servo (advanced)** as a separately recorded compatibility comparison. Never silently change algorithms during a measurement.
 4. Compare startup, seek/resume, a sustained high-bitrate scene, dropped frames, recoveries, clock uncertainty and timing distributions. A small reported drift is software evidence, not measured panel/speaker sync.
 5. Only after the uncorrected comparison, use the optional phone app in each desired mode. Its status shows the host's mode. **Start calibration / verify again** measures first; inspect the result without pressing Apply to retain the zero offset. **Apply suggested Video lead** saves only that mode's correction. Repeat to verify, then reload the movie.
 
-The phone's own capture resolution/bias limits what size of improvement it can establish. The current reference remains 720p SDR H.264, 24 fps and stereo TrueHD without Atmos; it does not validate a different HDR/Atmos processing mode or 4K bitrate load. No separate physical reference fixture is required. The published main host does not support the phone; use this branch's baseline mode for the same-clip numerical comparison.
+The phone's own capture resolution/bias limits what size of improvement it can establish. The current reference remains 720p SDR H.264, 24 fps and stereo TrueHD without Atmos; it does not validate a different HDR/Atmos processing mode or 4K bitrate load. No separate physical reference fixture is required. The historical v0.4.1 main release does not support the phone; use 1.0's baseline mode for the same-clip numerical comparison.
 
 ## LG S95TR and HDMI inspection without the phone
 
@@ -79,6 +79,6 @@ python -m pip install -r requirements-build.txt
 python tools_src/build_windows.py --dist dist/windows --work build/windows
 ```
 
-The existing CI workflow can validate/package the branch through manual workflow dispatch; its publish job is restricted to `main`. The user-authorized publication used explicit branch validation and release creation; no experimental merge into main was performed.
+CI validates Windows tests, EXE packaging/smoke checks, both Android modules and lint before publishing from `main`. Stable semantic versions publish as normal releases; beta versions publish as prereleases. Existing tags/assets are never overwritten. BUILD-INFO.json and SHA256SUMS.txt identify the exact source and packaged payloads.
 
-The Linux development environment can assemble/sign debug APKs and run Python/JVM tests. Windows CI validated CNG AES, real mpv source messages with null output and the frozen GUI. Actual CIM/HDMI routing and WASAPI hardware playback still require device validation. Real TV, S95TR and phone testing remain necessary before claiming improved physical sync. See [research and candidate decisions](sync-research.md), [phone details](phone-calibration.md) and [hardware acceptance](hardware-test.md).
+The Linux development environment can assemble/sign debug APKs and run Python/JVM tests. Windows CI validated CNG AES, real mpv source messages with null output and the frozen GUI. Native TV playback, HDMI Atmos indication, phone measurement/Apply and timing recovery have been observed on the tested setup; the user reported excellent sync. Read-only receiver inspection, broader compatibility, absolute accuracy and long-session reliability still need validation. See [research and candidate decisions](sync-research.md), [phone details](phone-calibration.md) and [hardware acceptance](hardware-test.md).

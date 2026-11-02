@@ -1,12 +1,21 @@
 # Changelog
 
+## 1.0.0 — stable, 2026-11-02
+
+- Promote the calibrated audio-clock build to main after the user reported excellent sync on the tested setup. Retain original timing and video servo as selectable alternatives.
+- Include source-timestamped audio, the remote TV clock, coordinated seek/play-pause, phone measurement/Apply and sanitized diagnostics.
+- Fix premature timing timeouts, stale reply handling and false phase jumps from renderer/receipt timestamp ordering. Reconnect timing within the control session and reacquire a fresh clock before loading/starting; require explicit resume after a timing fault.
+- Include calibration reference-EOF completion grace and bounded numeric detector diagnostics, plus correctly rotated/aspect-preserved phone preview and detection guide.
+- Version Windows, TV and phone as 1.0.0, retaining tested package IDs/private profiles for update continuity. Add stable Windows version metadata and stable release packaging/provenance/checksums.
+- Audio remains 1.0x compressed TrueHD; video remains original-byte native TV playback. Hardware/HDR-profile compatibility, absolute accuracy and long-session reliability retain the documented limits.
+
 ## 0.6.1-beta.1 — local calibration completion/diagnostics fix (unreleased)
 
 - Phone 0.1.2-beta.1 logs numeric flash/beep detections and relative onset intervals via `DTCalibration`; capable hosts also receive bounded progress telemetry.
 - Normal reference EOF permits a three-second completion window and reports missing detector counts. Manual playback/context changes still invalidate capture.
 - Complete six-pair validation and explicit Apply remain required; no accuracy thresholds, audio timing or TV synchronization algorithms changed.
 
-## 0.6.0-beta.1 — unreleased Robust Sync comparison
+## 0.6.0-beta.1 — historical Robust Sync comparison
 
 - Separate main-based branch and isolated desktop/TV identity; original timing, improved video-servo and remote-audio-clock modes with independent zero-default offset files.
 - Source-timestamped mpv samples, bounded affine clock/timeline estimation and a separate authenticated timing stream on the existing control port.
@@ -16,7 +25,7 @@
 - Mode/provenance/context diagnostics, profile-change indication, and phone client `0.1.1-beta.1` showing the active algorithm. Measurement precedes explicit Apply.
 - New source desktop launcher and comparison guide. Software testing does not establish improved physical lip-sync; Windows/TV/S95TR acceptance is still pending.
 
-## 0.5.0-beta.2 — unreleased phone calibration v1
+## 0.5.0-beta.2 — historical phone calibration v1
 
 - Separate Android phone calibration preview `0.1.0-beta.1`, LAN discovery/pairing and foreground Camera2/AudioRecord capture without a separate physical reference fixture.
 - Comparable capture-clock timestamps, tone/sample detection, exposure/rolling-shutter onset intervals and complete irregular six-cue matching.

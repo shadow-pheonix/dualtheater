@@ -2,46 +2,40 @@
 
 # DualTheater
 
-**Experimental beta — still in testing.** This is a working prototype for experimentation, not a finished or broadly validated home-theater player. Physical lip-sync, device compatibility and long-session reliability still need testing.
+**Stable release: 1.0.0.** The tested audio-clock build is now the main version. The user reported that sync looks perfect on the tested setup after calibration. Compatibility with other TVs, HDR profiles and HDMI devices still depends on the hardware; long-session and absolute physical accuracy testing continues.
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
-**Published Robust Sync branch:** `feature/robust-sync` builds Windows/TV `0.6.0-beta.1` with selectable **Original timing**, **Video servo** and **Audio clock** modes, separate saved offsets, source-timestamped audio, an authenticated timing connection, rendered-frame diagnostics and read-only LG S95TR/HDMI latency inspection. It includes the optional phone client `0.1.1-beta.1` for measuring before applying a correction. See the [installation and comparison guide](docs/robust-sync.md). The earlier `feature/playback-reliability` preview and base apps/releases remain unchanged. These experimental changes are not in the downloadable `0.4.1-beta.1` builds below, and improved physical sync is not yet established.
-
-## Branch builds
-
-**Local unreleased stability/calibration fix:** `fix/calibration-capture` uses host/TV source 0.6.3-beta.1 and phone 0.1.3-beta.1. It includes numeric capture diagnostics and bounded completion handling after normal reference EOF from the earlier local 0.6.1 update. Phone 0.1.3 corrects preview rotation and aspect ratio, supports either landscape direction, and aligns the flash guide with the analyzed region; black borders preserve the full camera image. Host/TV 0.6.3 restores a lost timing connection within the current control session, reacquires its clock before loading/starting, and gives the phone an actionable timing-readiness error. These changes are not included in the published downloads below. See [calibration troubleshooting](docs/phone-calibration.md#capture-diagnostics-and-reference-completion).
-
-The local branch also fixes premature timing disconnects: transport waits up to three seconds, while audio-anchor expiry and clock-confidence checks still pause unsafe playback. Delayed old replies are discarded; a timing write failure no longer closes the independent control connection. Install the local **0.6.3 TV update** for timing reconnection and the earlier fix to false phase jumps caused by thread delays. These changes are **not in published downloads**. After timing recovers, retry calibration or explicitly resume through Windows/the TV remote; playback is not automatically resumed. A full control disconnect still requires reconnecting and reloading the movie.
-
-All three build lines are published separately. The commit column identifies the source used for the attached assets; later documentation commits can advance the branch. New feature releases include BUILD-INFO.json with the complete branch/commit/CI/asset mapping. Use the Windows and TV apps from the same row and run only one Windows host at a time. Main retains the original timing implementation; experimental changes have not been merged into it.
-
-| Branch | Prerelease | Build commit | Downloads |
-| --- | --- | --- | --- |
-| `main` | [v0.4.1-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.4.1-beta.1) | [`eebf9a2`](https://github.com/shadow-pheonix/dualtheater/commit/eebf9a256fb50d54640022ad6a190d29f50926c2) | [Windows EXE](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/DualTheater-Windows-v0.4.1-beta.1-x64.exe) · [TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/DualTheater-TV-v0.4.1-beta.1-debug.apk) · [Source ZIP](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/DualTheater-v0.4.1-beta.1.zip) · [Checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/SHA256SUMS.txt) |
-| `feature/playback-reliability` | [v0.5.0-beta.2](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.5.0-beta.2) | [`17a2057`](https://github.com/shadow-pheonix/dualtheater/commit/17a2057519c50da71a910dafb385d355a1df300f) | [Windows EXE](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.5.0-beta.2/DualTheater-Windows-v0.5.0-beta.2-x64.exe) · [TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.5.0-beta.2/DualTheater-TV-v0.5.0-beta.2-debug.apk) · [Phone APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.5.0-beta.2/DualTheater-Calibration-v0.1.0-beta.1-debug.apk) · [Source ZIP](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.5.0-beta.2/DualTheater-v0.5.0-beta.2.zip) · [Checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.5.0-beta.2/SHA256SUMS.txt) |
-| `feature/robust-sync` | [v0.6.0-beta.1](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.6.0-beta.1) | [`d06248b`](https://github.com/shadow-pheonix/dualtheater/commit/d06248b5d66005e2121b3adc46ebabb22287d5b5) | [Windows EXE](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.6.0-beta.1/DualTheater-Windows-v0.6.0-beta.1-x64.exe) · [TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.6.0-beta.1/DualTheater-TV-v0.6.0-beta.1-debug.apk) · [Phone APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.6.0-beta.1/DualTheater-Calibration-v0.1.1-beta.1-debug.apk) · [Source ZIP](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.6.0-beta.1/DualTheater-v0.6.0-beta.1.zip) · [Checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.6.0-beta.1/SHA256SUMS.txt) |
-
-The preview adds diagnostics and optional phone calibration. Robust Sync adds three selectable timing modes and read-only receiver inspection; test it at zero Video lead before applying a phone correction. The feature TV apps and Windows profiles are separate from the base. Both phone builds use the same phone package ID; a differently signed installation may require uninstall/reinstall and re-pairing. Physical sync and real-device compatibility remain experimental.
+Version 1.0 includes audio-clock synchronization, coordinated TV remote controls, phone flash/beep calibration, diagnostics, camera-preview correction and timing reconnection. Original video bytes and compressed TrueHD audio are preserved. Audio stays at 1.0x.
 
 ## Download
 
-**Main baseline downloadable version: v0.4.1-beta.1 — experimental, still in testing.** The Windows EXE and TV APK are published and verified. Use the matching Windows and TV versions.
+Use the **Windows, TV and optional phone apps from v1.0.0**. Run one Windows host at a time.
 
 | Download | What to do with it |
 | --- | --- |
-| [Windows x64 portable EXE](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/DualTheater-Windows-v0.4.1-beta.1-x64.exe) | Download and double-click. No installer, administrator privileges, Python installation or terminal is needed. Click **Download mpv** on Connect, or Browse to your own build. |
-| [Android TV / Google TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/DualTheater-TV-v0.4.1-beta.1-debug.apk) | Sideload onto your TV. Includes the matching DualTheater icon and TV launcher banner. |
-| [Source ZIP / optional command-line host](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/DualTheater-v0.4.1-beta.1.zip) | For source users/developers; requires Python and mpv. Not needed to use the EXE. |
-| [SHA-256 checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v0.4.1-beta.1/SHA256SUMS.txt) | Compare with `Get-FileHash` to verify downloaded files. |
+| [Windows x64 portable EXE](https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0/DualTheater-Windows-v1.0.0-x64.exe) | Download and double-click. No installer, administrator privileges or Python installation needed. Click **Download mpv**, or Browse to your known-working `mpv.exe`. |
+| [Android TV / Google TV APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0/DualTheater-TV-v1.0.0-debug.apk) | Sideload onto your TV and open **DualTheater TV**. |
+| [Optional Android phone calibration APK](https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0/DualTheater-Calibration-v1.0.0-debug.apk) | Sideload onto a supported Android phone; [measure and apply a correction](docs/phone-calibration.md). A phone is not required for playback or manual calibration. |
+| [Source ZIP / command-line host](https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0/DualTheater-v1.0.0.zip) | Extract into a fresh folder; requires Python and mpv. See [commands and setup](docs/command-line.md). |
+| [SHA-256 checksums](https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0/SHA256SUMS.txt) | Compare with `Get-FileHash` to verify downloaded files. |
+| [Build provenance](https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0/BUILD-INFO.json) | Source commit, CI run and payload hashes for this release. |
 
-[Release notes](https://github.com/shadow-pheonix/dualtheater/releases/tag/v0.4.1-beta.1) · [All releases](https://github.com/shadow-pheonix/dualtheater/releases) · [How to use](#how-to-use)
+[Release notes](https://github.com/shadow-pheonix/dualtheater/releases/tag/v1.0.0) · [All releases / older comparison builds](https://github.com/shadow-pheonix/dualtheater/releases) · [How to use](#how-to-use)
 
-The EXE includes Python and its GUI runtime. Click **Download mpv** inside the app to download it directly from the official upstream release, verify it and select it automatically. This first setup needs Internet access (about 37 MiB); later launches use the cached player offline. **Browse…** still accepts your known-working build. mpv is not embedded or redistributed in our EXE. See [download details and recovery](docs/player-download.md). The EXE is an unsigned development build. Older beta releases and locked local snapshots are preserved.
+The EXE includes Python and its GUI runtime. **Download mpv** fetches the pinned upstream player, verifies it and selects it automatically. This first setup needs Internet access (about 37 MiB); later launches use the cached player offline. **Browse…** accepts your known-working build. mpv is not embedded or redistributed in our EXE. See [download details and recovery](docs/player-download.md).
+
+The Windows EXE is unsigned; Android APKs are development-signed (hence `-debug.apk`). Stable describes the release channel, not a signing certificate or universal compatibility guarantee. If Android reports a signing-certificate mismatch, preserve your settings privately, uninstall that app, install the new APK and pair again. CI keys are not retained between runs.
+
+## Updating from earlier builds
+
+The stable build keeps the tested Robust Sync identities: Windows state remains under `%LOCALAPPDATA%\DualTheater-RobustSync`, TV package `dev.dualtheater.tv.robustsync`, phone package `dev.dualtheater.calibration.preview`. Matching-signature updates retain pairing and calibration. Older base/preview TV apps and profiles remain separate; open **DualTheater TV** for 1.0, not an older Beta/Preview launcher. All old releases and locked artifacts are preserved.
+
+When using the source CLI, keep the same private `--data-dir` to retain its offsets and credentials. A hardware-test profile is not automatically imported into the desktop profile. Never distribute your settings or logs with a build.
 
 ## Why this project exists
 
-DualTheater aims to make high-quality 4K remux playback with lossless audio possible using a Windows laptop or desktop PC you already own, together with your compatible TV and HDMI sound system. By putting that existing hardware to work, it can help avoid the cost of a separate dedicated media player, such as an NVIDIA Shield. It is an experimental approach, and compatibility and synchronization still need testing on each setup.
+DualTheater aims to make high-quality 4K remux playback with lossless audio possible using a Windows laptop or desktop PC you already own, together with your compatible TV and HDMI sound system. By putting that existing hardware to work, it can help avoid the cost of a separate dedicated media player, such as an NVIDIA Shield. Check compatibility and calibration on each setup.
 
 A TV's internal player may handle HDR video well while being unable to pass through a local file's lossless TrueHD Atmos track. A Windows laptop or desktop PC may bitstream that audio correctly while local Dolby Vision video output is difficult or unsupported for the source. DualTheater separates those jobs so an existing TV, Windows laptop or desktop PC, and compatible HDMI audio device can each do the part they support.
 
@@ -85,13 +79,13 @@ There is no platform-specific TV brand integration, video re-encode, HDR convers
 
 Use a Windows 10/11 **x64 laptop or desktop PC**. Connect its HDMI output, or a compatible HDMI adapter on a display-capable USB-C port, to your soundbar/receiver's **HDMI IN**. Select that HDMI input. Put the computer and TV on the same trusted home network and keep the computer awake during playback.
 
-Download the Windows EXE and matching APK from [Download](#download). Transfer the APK to the TV and open it using a file manager/package installer. Allow that installer to install apps when the TV asks. Then open **DualTheater TV Beta**. Device menus vary. For optional ADB commands, see the [advanced installation guide](docs/command-line.md#2-install-the-tv-app).
+Download the Windows EXE and matching APK from [Download](#download). Transfer the APK to the TV and open it using a file manager/package installer. Allow that installer to install apps when the TV asks. Then open **DualTheater TV**. Device menus vary. For optional ADB commands, see the [advanced installation guide](docs/command-line.md#2-install-the-tv-app).
 
 No Android Studio, Java, Gradle, FFmpeg or Python installation is needed for normal use of the EXE and APK. If you already have a source-host terminal open, stop it before opening the EXE.
 
 ### 2. Connect in the Windows app
 
-1. Double-click **DualTheater-Windows-v0.4.1-beta.1-x64.exe**. The application stays in one window with **Connect**, **Player**, and **Settings & help** pages.
+1. Double-click **DualTheater-Windows-v1.0.0-x64.exe**. The application stays in one window with **Connect**, **Player**, and **Settings & help** pages.
 2. On **Connect**, click **Download mpv** and wait for verification, extraction and automatic player selection. The app refreshes the audio list when ready. If you prefer your existing build, click **Browse…** and select its `mpv.exe`; keep its DLLs beside it. A saved, downloaded, adjacent or PATH player can already fill in the path. Click **Refresh** if necessary.
 3. Under **HDMI audio**, select the soundbar/receiver's friendly Windows name. Speakers and other WASAPI outputs can also appear; selecting one does not guarantee TrueHD capability. There is no long device ID to copy.
 4. Click **Start TV connection**. The app displays the computer name and a six-digit code. Allow the app on your private network if Windows asks.
@@ -109,7 +103,7 @@ Keep the Windows app open throughout playback. Check the TV's active HDR indicat
 
 ## Operating the player
 
-The instructions in this section describe the published `0.4.1-beta.1` build. The separate Robust Sync branch adds selectable timing modes on **Connect** (disconnect before changing), independent zero-default offsets, receiver inspection on **Settings & help**, and a **Diagnostics** page and **Export sanitized report…**; see the [comparison guide](docs/robust-sync.md) and [diagnostics guide](docs/diagnostics.md). Its separate paired phone client can start a reference test and suggest a saved lip-sync correction; follow [phone calibration instructions](docs/phone-calibration.md). After a TV reconnect or calibration test, reload the movie before playback.
+These instructions describe **v1.0.0**. Keep **Audio clock (recommended)** selected on Connect for the tested synchronization path. Disconnect before changing modes. Each mode has a separate saved offset. **Diagnostics** shows clock/buffer information and offers **Export sanitized report…**. See [timing and recovery](docs/robust-sync.md), [diagnostics](docs/diagnostics.md) and [optional phone calibration](docs/phone-calibration.md).
 
 | Task | In the Windows app |
 | --- | --- |
@@ -119,17 +113,19 @@ The instructions in this section describe the published `0.4.1-beta.1` build. Th
 | Play another movie | Choose it with **Choose movie…**, click **Load movie**, wait, then **Play**. |
 | Adjust physical lip-sync | In **Settings & help**, change **Video lead (ms)** and press **Save and resynchronize**. Increase it if sound arrives early; decrease it if sound arrives late. |
 | Recover a timing disturbance | On **Player**, click **Resynchronize**. It preserves the paused/playing state while coordinating both players again. |
-| Recover a lost TV connection | Reconnect on the TV, then **Load movie** again. Playback controls stay disabled until reloading succeeds. Resume after preparation. |
+| Recover a lost TV control connection | Reconnect on the TV, then **Load movie** again. Playback controls stay disabled until reloading succeeds. Resume after preparation. |
 | Change mpv or HDMI output | On **Connect**, click **Disconnect** first. Use **Download mpv** or **Browse…**, choose the HDMI output, then **Start TV connection**. Reconnect the TV and reload the movie. |
 | Stop playback and exit | Close the Windows app. It stops its host/audio process and closes the TV connection. Closing the optional browser controller does not exit the app. |
+
+If only the timing connection drops, playback pauses and timing reconnects automatically. Once the clock is fresh, explicitly press **Play** or retry calibration; reconnection alone does not resume playback. If the full TV control connection drops, reconnect and reload the movie.
 
 All transport controls use the existing shared Windows/TV synchronization barrier. Audio speed stays at 1.0x; small drift corrections affect video only. Receiver relock can briefly interrupt sound after a seek or pause/resume.
 
 ### Settings, calibration and updates
 
-Desktop settings, remembered TV credentials, calibration and logs are stored under **`%LOCALAPPDATA%\DualTheater`**, not inside the EXE or its temporary extraction folder. Use **Settings & help → Open local settings folder** to find them. Preserve these files privately when updating; do not publish them. Moving/replacing the EXE does not reset them. Downloaded mpv and its supporting DLLs are stored in the `players` subfolder and reused offline. **Settings & help → mpv download / source** opens the exact upstream release; use **Browse…** if you want another build. There is no silent player update. The older source launcher uses its own source-folder state, so the first switch to the EXE may require pairing and calibrating again; the old files are left intact.
+Desktop settings, remembered TV credentials, calibration and logs are stored under **`%LOCALAPPDATA%\DualTheater-RobustSync`**, not inside the EXE or its temporary extraction folder. Use **Settings & help → Open local settings folder** to find them. Preserve these files privately when updating; do not publish them. Moving/replacing the EXE does not reset them. Downloaded mpv and its supporting DLLs are stored in the `players` subfolder and reused offline. **Settings & help → mpv download / source** opens the exact upstream release; use **Browse…** if you want another build. There is no silent player update. The current source launcher defaults to the same profile, while a custom `--data-dir` remains separate. Preserve any older profiles privately; they are not imported automatically.
 
-The optional source ZIP includes `calibration-SDR-TrueHD-no-Atmos.mkv`, an original flash/beep clip. Extract the ZIP and choose that file in **Player** for a basic timing check. It is **SDR with stereo TrueHD, not HDR/Atmos**. Verify the offset again with your movie and processing modes. These automatic features are absent from published 0.4.1 builds. The development branch has a separate [phone calibration client](docs/phone-calibration.md); a dedicated TV calibration screen is not included.
+The optional source ZIP includes `calibration-SDR-TrueHD-no-Atmos.mkv`, an original flash/beep clip. Extract the ZIP and choose that file in **Player** for a basic timing check. It is **SDR with stereo TrueHD, not HDR/Atmos**. Verify the offset again with your movie and processing modes. For automatic measurement, install the optional [phone calibration client](docs/phone-calibration.md), connect it to Windows and press **Start calibration / verify again**. Review the result before **Apply suggested Video lead**. This replaces the movie with the reference; reload your movie afterward. A dedicated TV calibration screen is not included.
 
 The APK is development-signed. If Android reports a signing-certificate mismatch, uninstall the previous TV app before installing the new APK and pair again. CI debug signing keys are not retained or published. Use a matching host/APK release; do not run multiple hosts against the default ports.
 
@@ -145,7 +141,7 @@ The APK is development-signed. If Android reports a signing-certificate mismatch
 To launch the portable EXE from PowerShell rather than double-clicking:
 
 ```powershell
-.\DualTheater-Windows-v0.4.1-beta.1-x64.exe
+.\DualTheater-Windows-v1.0.0-x64.exe
 ```
 
 For Python launch commands, downloading/extracting the source ZIP, optional ADB installation and standalone mpv checks, use the [advanced command-line guide](docs/command-line.md). These steps are optional for EXE users.
@@ -165,13 +161,13 @@ The timeline auto-hides after five seconds while playing. It stays visible while
 
 All committed transport operations go through the Windows coordinator. The TV does not independently seek or resume its video clock in response to remote buttons.
 
-## Synchronization and beta limits
+## Synchronization and validation limits
 
-The audio clock is the master. The host compares mpv's driver-adjusted audio position with scheduled TV frame timestamps using synchronized monotonic clocks. Small corrections change **video speed only**. Sustained drift or a buffer underrun triggers a shared pause/prepare/restart barrier.
+The audio clock is the master. In the default audio-clock mode, source-timestamped Windows audio anchors drive the TV renderer's media clock using synchronized monotonic clocks. Video-servo mode applies bounded video-speed corrections; original timing retains the older scheduled-frame comparison. TrueHD audio stays at **1.0x**. Sustained drift or a buffer underrun triggers a shared pause/prepare/restart barrier.
 
 These are estimated API timings, not measurements of sound pressure or photons. Panel processing, receiver buffering, refresh cadence, Windows scheduling and firmware behavior can introduce fixed latency or variable error. A small drift value does not prove acoustic lip-sync. Calibration and longer real-device tests are required, particularly after seeking and pause/resume.
 
-Basic simultaneous TV video and receiver-reported Atmos playback have been observed on one setup. Broader TV coverage, discovery, remote-control behavior, long-term stability and physical A/V sync remain under testing. See [testing status](docs/testing.md) and the [hardware test guide](docs/hardware-test.md).
+Simultaneous native TV video and receiver-indicated Atmos have been observed. The user reported excellent physical sync on the calibrated build promoted to 1.0. This is a single-setup observation; broader TV coverage, long-term reliability and sync after repeated seek/resume cycles still need testing. See [testing status](docs/testing.md) and the [hardware test guide](docs/hardware-test.md).
 
 The current target is an ordinary single-timeline MKV. Subtitles, playlists, video-track switching, app background playback, automatic playback resume after reconnect, unusual timestamp origins and exotic containers are not validated. After reconnecting, reload the media on Windows. TrueHD may briefly relock after pause or seek.
 
@@ -179,7 +175,7 @@ The current target is an ordinary single-timeline MKV. Subtitles, playlists, vid
 
 For ongoing development or a new Codex session, start with [project context](docs/context.md) and follow [AGENTS.md](AGENTS.md). Updating the shared context after meaningful changes and before handoffs is mandatory. Whenever a project change makes installation or operating instructions outdated, update the affected README instructions in that same change before publishing.
 
-This branch builds **Robust Sync 0.6.0-beta.1**. The desktop uses `%LOCALAPPDATA%\DualTheater-RobustSync`, and **DualTheater TV Robust Sync** uses `dev.dualtheater.tv.robustsync`, preserving both earlier apps/profiles. Use a matching branch-built host/TV pair and run one host at a time. The optional phone build is `0.1.1-beta.1`. Follow the [installation and zero-offset comparison guide](docs/robust-sync.md). The candidate is published separately; physical validation remains pending.
+Main builds **1.0.0** for Windows, TV and optional phone. App/package identities and the private RobustSync profile are retained for upgrade continuity. See [timing modes and recovery](docs/robust-sync.md).
 
 To build the Windows EXE from source on Windows with Python 3.11 x64:
 
