@@ -43,3 +43,57 @@ The correction preceding this audit passed 41 TV JVM tests, Android assembly/lin
 The original long-session pause was a receiver anchor-expiry fault with healthy video buffering and fresh source audio. The candidate aligns maximum TV holdover with the existing three-second timing-link deadline while preserving the uncertainty ceiling. The underlying delivery/processing gap remains unidentified, and whole-movie reliability remains unverified. No additional timeout widening, audio-speed change or new drift controller was introduced during this audit.
 
 The previously observed difference between the managed mpv build and the user's working external build remains a setup-dependent compatibility issue: software/null-output verification cannot establish physical WASAPI/HDMI continuity. Native renderer lifecycle, real cache/network scheduling, repeated remote operations and full-film behavior still need device validation when the user makes the hardware available again.
+
+## Additional read-only playback review — 2026-11-03
+
+The follow-up reviewed Windows coordinator commands/monitoring, TV session ownership and receiver liveness, mpv audio-track verification, and TV cache seek/read-head handling on \`main\` at \`4a6dc4c\`. No playback implementation changed between the original audited commit \`3c4945c\` and this revision; the intervening changes were documentation only. The **four P2 issues above remain the prior audit's offline-reproduced findings**.
+
+The five issues below are **additional code-review findings, not reproduced defects**. Severity expresses anticipated playback impact if the described condition is triggered. No new JVM/Python tests, device playback, ADB commands, host commands, or live network observations were performed for this follow-up.
+
+### P2 (code review) — Control liveness can hide indefinitely stale TV video status
+
+- **Locations:** \`host/server.py:405–410\`, \`1303–1338\`, \`1357–1394\`, \`1519–1546\`; \`android/app/src/main/java/dev/dualtheater/tv/ControlClient.java:46–67\`.
+- **Trigger:** The TV's status-producing main thread stops updating while its separate control reader can still process pings and send pongs (particularly relevant to baseline mode).
+- **Behavior:** \`tv()\` checks the timestamp of **any** received control message, not the last status report. The monitor intentionally skips frame/timeline checks on status older than 500 ms, but has no independent maximum *status-age* deadline. Control pongs can thus keep the peer alive while Windows mpv audio continues with no fresh evidence of TV video progress. The receiver's separate source/timing checks may stop the session in some modes; this does not establish a video-status bound.
+- **Evidence/uncertainty:** This is a control-flow inference, not a reproduced frozen-TV-main-thread incident. The existing \`test_delayed_status_does_not_masquerade_as_a_frozen_video_frame\` verifies that a 1.3-second status delay should **not** cause a false pause; it does not exercise a sustained status outage with fresh control pongs.
+- **Correction:** Preserve short status-delay tolerance, but set an explicit bounded stale-video-telemetry deadline separate from control socket liveness. Test brief delays, prolonged status silence with live pongs, and genuinely stale/dead connections in all three sync modes.
+
+### P2 (code review) — Simultaneous TV handshakes can both claim the single-TV slot
+
+- **Location:** \`host/server.py:1503–1524\` (\`ControlHandler.handle\`).
+- **Trigger:** Two authenticated TV control connections reach the availability check at nearly the same time.
+- **Behavior:** \`if app.peer and not app.peer.closed\` and the subsequent \`app.peer = peer\` run in separate server threads without an atomic reservation. Both connections can pass the check, receive a welcome, and remain alive even though the coordinator points at only one of them. Status/ACKs, controls, and session-bound timing can then disagree about which TV owns playback.
+- **Evidence/uncertainty:** The unprotected check/assignment is visible in code; no concurrent-handshake regression or hardware reproduction was run.
+- **Correction:** Reserve and release the sole TV slot under a short dedicated lock and reject the losing connection before sending welcome. Test racing handshakes, disconnect during takeover attempts, and reconnection after an abandoned session.
+
+### P2 (code review) — Rejected load and offset requests can stop the currently playing movie
+
+- **Locations:** \`host/server.py:496–503\`, \`941–1073\` (especially \`997–1003\`, \`1014–1031\`, \`1069–1072\`).
+- **Trigger:** During valid playback, submit a non-existent/unsupported movie path through the local load command or a non-finite/out-of-range offset through the controller.
+- **Behavior:** Input validation may reject the request **before** the new load/offset takes ownership of playback, but the shared \`Coordinator.action\` exception handler still invokes \`fail()\`, which pauses both devices and advances the epoch. This is a broader instance of the previously reproduced invalid-seek bug, not a new independent root cause.
+- **Evidence/uncertainty:** The paths are visible in code; these particular invalid-load/offset scenarios were not rerun in this review.
+- **Correction:** Validate requests before entering the playback-failure boundary. Keep coordinated failure handling for errors *after* an operation has begun mutating media/playback. Test that invalid load, seek and offset requests preserve active epoch, playing state, audio, video and current media.
+
+### P2 (code review) — Failed audio-track change leaves no rollback to the previous working selection
+
+- **Locations:** \`host/server.py:539–585\`, \`1021–1028\`, \`1043–1058\`; \`host/mpv.py:227–252\`.
+- **Trigger:** Choose an audio track whose codec is cataloged as supported, but whose selected track cannot be verified as compressed passthrough on the active WASAPI/HDMI endpoint.
+- **Behavior:** The host pauses, changes mpv's \`aid\`, seeks/prepares, then runs \`mpv.verify()\`. Codec-level \`supported\` is not an endpoint-specific guarantee. On failure, the coordinator goes to \`error\` without restoring the prior \`aid\` and playback position. A formerly playable movie can remain stranded on the failed selection.
+- **Evidence/uncertainty:** This follows from command ordering and lack of rollback. No failing HDMI endpoint/codec combination was exercised in this follow-up.
+- **Correction:** Save old \`aid\`, play state and position; verify the new selection; if it cannot be used, restore and verify the previous track through the existing coordination barrier. Distinguish a recoverable track-choice rejection from a genuine device/output failure. Add successful/failed switch regressions.
+
+### P3 (code review) — Reusing the same media URI can temporarily prefetch from the previous seek position
+
+- **Locations:** \`android/app/src/main/java/dev/dualtheater/tv/ReadAheadCache.java:212–245\`, \`271–312\`, \`477–494\`; \`ReadAheadWindow.java:8–16\`.
+- **Trigger:** Seek substantially within the same movie URL; native preparation becomes READY before foreground consumption crosses the read-head notification threshold.
+- **Behavior:** A new \`TrackingDataSource.open()\` calls \`opening(uri)\`, but \`opening\` does not reinitialize the read head for an unchanged URI. The worker resumes after READY using the old byte position until foreground reads signal a new head (normally at 256 KiB consumed). This can spend temporary network/cache I/O around the obsolete location while the newly sought position needs data.
+- **Evidence/uncertainty:** A plausible performance hazard from code inspection, **not** evidence that this caused a real TV underrun. Existing cache design intentionally suppresses overly frequent read-head updates and prioritizes preparation.
+- **Correction:** Assess whether the new \`DataSpec.position\` can safely establish the seek/reopen read head without breaking coalesced reads, caching, or bounded cancellation. Regressions should instrument a large seek, short prefetch/READY window, cache holes/eviction and end-of-file ranges; measure foreground stalls before changing scheduling.
+
+## Follow-up priority and validation boundaries
+
+The highest-value corrections are: (1) separate invalid input rejection from playback failure (including the original seek case), (2) drain the remaining track at EOF, (3) make TV connection ownership/cancellation safe, (4) enforce bounded TV video-status staleness, (5) recover from unsuccessful audio selection and keep calibration fields consistent. Investigate the cache seek prefetch concern with measured I/O before considering a change.
+
+Suggested isolated regression cases: invalid seek/load/offset preserve ongoing playback; both audio-first and video-first EOF; immediate close-before-connect and racing authenticated TV handshakes; prolonged missing TV status while pongs continue; failure to establish passthrough after selecting another listed audio codec; long-distance seek with cache/foreground I/O instrumentation. These tests are **proposed, not run**.
+
+The original long-session \`audio_anchor_expired\` interruption is still not explained by a proven underlying delivery/scheduling cause. The three-second TV holdover candidate does not establish whole-film reliability, HDR/Atmos compatibility across devices, or physical A/V accuracy. This follow-up did not request, start, or observe hardware playback.
