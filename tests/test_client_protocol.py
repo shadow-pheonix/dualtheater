@@ -298,7 +298,9 @@ class ClientProtocolSocketTests(unittest.TestCase):
             self.app.offset_ms, self.app.mpv.current())
         escaped = self.phone.request('load_entry', provider='windows', entry=str(self.media_root / 'movie.mkv'), autoplay=False)
         self.assertFalse(escaped['ok'])
-        self.assertEqual(self.app.media, self.media_root / 'movie.mkv')
+        # Windows runners can expose TEMP through an 8.3 alias while library
+        # containment resolves its long name. Verify the selected file itself.
+        self.assertTrue(self.app.media.samefile(self.media_root / 'movie.mkv'))
         self.assertEqual(self.app.media_generation, generation)
         self.assertEqual(self.app.state, playback_before_rejected_path[0])
         self.assertEqual(self.app.epoch, playback_before_rejected_path[1])
