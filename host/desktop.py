@@ -15,6 +15,7 @@ import webbrowser
 from .desktop_support import (DesktopService, Settings, VERSION, default_data_dir,
                               find_mpv, format_time, list_devices, runtime_args)
 from .server import HostRuntime
+from .desktop_library import LibraryPane, ScrollablePage
 from .player_download import DOWNLOAD_PAGE
 from .diagnostics import save_report
 
@@ -28,6 +29,9 @@ class DesktopWindow:
         self.devices = []
         self.track_ids = []
         self.track_key = None
+        self.subtitle_ids = ['off']
+        self.subtitle_key = None
+        self.loaded_generation = None
         self.status = {}
         self.running = self.busy = self.closing = self.dragging = False
         self.downloading = False
@@ -62,11 +66,24 @@ class DesktopWindow:
         if (assets / 'dualtheater.ico').is_file():
             self.root.iconbitmap(str(assets / 'dualtheater.ico'))
         style = ttk.Style(root)
-        if 'vista' in style.theme_names():
-            style.theme_use('vista')
-        style.configure('TButton', padding=(12, 7))
+        style.theme_use('clam')
+        self.root.configure(background='#101827')
+        style.configure('.', background='#101827', foreground='#F4F7FB', font=('Segoe UI', 10))
+        style.configure('TButton', background='#1B293D', foreground='#F4F7FB', padding=(12, 8), borderwidth=1)
+        style.map('TButton', background=[('active', '#27465B'), ('pressed', '#285D64')], foreground=[('disabled', '#78899D')])
+        style.configure('TEntry', fieldbackground='#1B293D', foreground='#F4F7FB', insertcolor='#F4F7FB')
+        style.configure('TCombobox', fieldbackground='#1B293D', background='#1B293D', foreground='#F4F7FB', arrowcolor='#45D7C8')
+        style.map('TCombobox', fieldbackground=[('readonly', '#1B293D')], foreground=[('readonly', '#F4F7FB'), ('disabled', '#78899D')])
+        style.configure('TNotebook', background='#101827', borderwidth=0)
+        style.configure('TNotebook.Tab', background='#1B293D', foreground='#B8C6D9', padding=(14, 10))
+        style.map('TNotebook.Tab', background=[('selected', '#285D64')], foreground=[('selected', '#F4F7FB')])
+        style.configure('Treeview', background='#1B293D', fieldbackground='#1B293D', foreground='#F4F7FB', rowheight=30)
+        style.map('Treeview', background=[('selected', '#285D64')], foreground=[('selected', '#F4F7FB')])
+        style.configure('Treeview.Heading', background='#1B293D', foreground='#45D7C8', padding=8)
+        self.root.option_add('*TCombobox*Listbox.background', '#1B293D')
+        self.root.option_add('*TCombobox*Listbox.foreground', '#F4F7FB')
         style.configure('Title.TLabel', font=('Segoe UI', 22, 'bold'))
-        style.configure('Heading.TLabel', font=('Segoe UI', 13, 'bold'))
+        style.configure('Heading.TLabel', font=('Segoe UI', 14, 'bold'), foreground='#45D7C8')
         style.configure('Code.TLabel', font=('Consolas', 25, 'bold'))
         style.configure('Navigate.TButton', font=('Segoe UI', 9, 'bold'), padding=(16, 7))
         outer = ttk.Frame(root, padding=20)
@@ -80,24 +97,27 @@ class DesktopWindow:
         ttk.Label(outer, text='Native TV picture + HDMI TrueHD audio').pack(anchor='w', pady=(0, 14))
         self.tabs = ttk.Notebook(outer)
         self.tabs.pack(fill='both', expand=True)
-        self.connect = ttk.Frame(self.tabs, padding=18)
-        self.player = ttk.Frame(self.tabs, padding=18)
-        self.diagnostics_page = ttk.Frame(self.tabs, padding=18)
-        self.options = ttk.Frame(self.tabs, padding=18)
-        for frame, title in ((self.connect, '1  Connect'), (self.player, '2  Player'),
-                             (self.diagnostics_page, 'Diagnostics'), (self.options, 'Settings & help')):
-            self.tabs.add(frame, text=title)
+        self.tab_pages = {}
+        for attribute, title in (('connect', '1  Connect'), ('library', '2  Library'), ('player', '3  Player'),
+                                 ('diagnostics_page', 'Diagnostics'), ('options', 'Settings & help')):
+            page = ScrollablePage(self.tabs); setattr(self, attribute, page.body)
+            self.tab_pages[page.body] = page; self.tabs.add(page, text=title)
         self._connect_page()
+        self.library_pane = LibraryPane(self.library, self._queue, self.note, lambda: self.select_page(self.player))
+        self.library_pane.pack(fill='both', expand=True)
         self._player_page()
         self._diagnostics_page()
         self._settings_page()
-        ttk.Label(outer, textvariable=self.error_text, foreground='#a82020', wraplength=850).pack(anchor='w', pady=(10, 0))
+        ttk.Label(outer, textvariable=self.error_text, foreground='#FF9292', wraplength=850).pack(anchor='w', pady=(10, 0))
         self.activity = ttk.Progressbar(outer, mode='indeterminate')
         self.activity.pack(fill='x', pady=(7, 0))
         self._update_controls()
         self.root.after(120, self._events)
         if self.mpv_path.get():
             self.root.after(250, self.refresh_devices)
+
+    def select_page(self, page):
+        self.tabs.select(self.tab_pages[page])
 
     @staticmethod
     def note(parent, text):
@@ -137,7 +157,7 @@ class DesktopWindow:
         self.stop_button = ttk.Button(row, text='Disconnect', command=self.stop)
         self.stop_button.pack(side='left', padx=8)
         self.player_button = ttk.Button(row, text='Go to Player →', style='Navigate.TButton',
-                                       command=lambda: self.tabs.select(self.player))
+                                       command=lambda: self.select_page(self.player))
         self.player_button.pack(side='right')
         ttk.Separator(self.connect).pack(fill='x', pady=8)
         ttk.Label(self.connect, textvariable=self.connection_text, style='Heading.TLabel', wraplength=790).pack(anchor='w', pady=6)
@@ -153,7 +173,7 @@ class DesktopWindow:
         ttk.Button(row, text='Choose movie…', command=self.choose_movie).pack(side='left')
         self.load_button = ttk.Button(row, text='Load movie', command=self.load_movie)
         self.load_button.pack(side='left', padx=(8, 0))
-        self.note(self.player, 'Choose an original MKV with a TrueHD audio track. Loading prepares both devices; press Play when ready.')
+        self.note(self.player, 'Choose an original movie with supported HDMI bitstream audio, or browse Library. Loading prepares both devices; press Play when ready.')
         row = ttk.Frame(self.player)
         row.pack(fill='x', pady=8)
         self.play_button = ttk.Button(row, text='Play', command=lambda: self.action('play'))
@@ -186,8 +206,14 @@ class DesktopWindow:
         self.track_box.pack(side='left', fill='x', expand=True, padx=8)
         self.track_button = ttk.Button(row, text='Switch track', command=self.switch_track)
         self.track_button.pack(side='left')
+        row = ttk.Frame(self.player); row.pack(fill='x', pady=6)
+        ttk.Label(row, text='Subtitles').pack(side='left')
+        self.subtitle_box = ttk.Combobox(row, values=['Off'], state='readonly')
+        self.subtitle_box.current(0); self.subtitle_box.pack(side='left', fill='x', expand=True, padx=8)
+        self.subtitle_button = ttk.Button(row, text='Apply subtitles', command=self.switch_subtitle)
+        self.subtitle_button.pack(side='left')
         ttk.Label(self.player, textvariable=self.audio_text, wraplength=790).pack(anchor='w', pady=8)
-        self.note(self.player, 'TV remote: OK plays/pauses; left/right seeks. All transport controls use the same Windows synchronization barrier.')
+        self.note(self.player, 'TV remote: OK plays/pauses; left/right seeks; Up/Menu opens Library, audio and subtitle options. All transport controls use the same Windows synchronization barrier.')
 
     def _diagnostics_page(self):
         page = self.diagnostics_page
@@ -199,8 +225,8 @@ class DesktopWindow:
         self.export_button = ttk.Button(page, text='Export sanitized report…', command=self.export_diagnostics)
         self.export_button.pack(anchor='w', pady=6)
         self.note(page, 'Preview the report fields below; export saves the latest measurements. Reports exclude movie names, paths, network addresses, device identifiers, pairing data and raw logs. Counters reset when the Windows host restarts; drift statistics use the latest 600 accepted samples.')
-        ttk.Label(page, textvariable=self.export_notice, foreground='#245e39').pack(anchor='w')
-        self.diagnostic_preview = tk.Text(page, height=12, wrap='word', state='disabled', font=('Consolas', 9))
+        ttk.Label(page, textvariable=self.export_notice, foreground='#45D7C8').pack(anchor='w')
+        self.diagnostic_preview = tk.Text(page, height=12, wrap='word', state='disabled', font=('Consolas', 9), background='#1B293D', foreground='#F4F7FB', insertbackground='#F4F7FB')
         self.diagnostic_preview.pack(fill='both', expand=True, pady=6)
 
     def export_diagnostics(self):
@@ -222,7 +248,7 @@ class DesktopWindow:
         self.note(self.options, 'Enter the soundbar’s private network address. Queries preserve all settings. HDMI declarations may describe a different video path.')
         ttk.Label(self.options, textvariable=self.receiver_text, wraplength=790).pack(anchor='w', pady=(0, 8))
         ttk.Label(self.options, text='Lip-sync adjustment', style='Heading.TLabel').pack(anchor='w')
-        self.note(self.options, 'If sound arrives early, increase Video lead. If sound arrives late, decrease it. Save and resynchronize applies the offset through coordinated playback. The separate phone client can measure before applying a correction.')
+        self.note(self.options, 'If sound arrives early, increase Video lead. If sound arrives late, decrease it. Save and resynchronize applies the offset through coordinated playback. Phone calibration is recommended: increase the receiver volume so all six beeps are audible at the phone, measure, review and Apply. Reload the movie afterward.')
         row = ttk.Frame(self.options)
         row.pack(fill='x', pady=5)
         ttk.Label(row, text='Video lead (ms)').pack(side='left')
@@ -244,7 +270,7 @@ class DesktopWindow:
         ttk.Button(licenses, text='Third-party licenses', command=self.open_licenses).pack(side='left')
         ttk.Button(licenses, text='mpv download / source', command=lambda:webbrowser.open(DOWNLOAD_PAGE)).pack(side='left', padx=(8, 0))
         ttk.Label(self.options, text='Local session details — may contain private paths/device information').pack(anchor='w')
-        self.details = tk.Text(self.options, height=10, wrap='word', state='disabled', font=('Consolas', 9))
+        self.details = tk.Text(self.options, height=10, wrap='word', state='disabled', font=('Consolas', 9), background='#1B293D', foreground='#F4F7FB', insertbackground='#F4F7FB')
         self.details.pack(fill='both', expand=True, pady=6)
 
     def choose_mpv(self):
@@ -304,6 +330,12 @@ class DesktopWindow:
 
     def action(self, name, **values):
         self.error_text.set('')
+        if name == 'pause':
+            self.service.submit('priority_pause')
+            return
+        if name in ('track', 'subtitle'):
+            context = self.status.get('client_state', {})
+            values.update(epoch=context.get('epoch'), media_generation=context.get('media_generation'))
         self._queue('action', action=name, **values)
 
     def seek_relative(self, seconds):
@@ -327,6 +359,11 @@ class DesktopWindow:
         index = self.track_box.current()
         if 0 <= index < len(self.track_ids):
             self.action('track', aid=self.track_ids[index])
+
+    def switch_subtitle(self):
+        index = self.subtitle_box.current()
+        if 0 <= index < len(self.subtitle_ids):
+            self.action('subtitle', sid=self.subtitle_ids[index])
 
     def save_offset(self):
         try:
@@ -409,6 +446,8 @@ class DesktopWindow:
                     self.offset_loaded = False
                     self.require_reload = True
                     self.export_notice.set('')
+                elif kind == 'library_result':
+                    self.library_pane.result(value['action'], value['result'])
                 elif kind == 'diagnostics_exported':
                     self.export_notice.set('Sanitized report saved.')
                 elif kind == 'stopped':
@@ -421,6 +460,11 @@ class DesktopWindow:
                     self.playback_text.set('Reconnect the TV, then reload the movie.')
                     self.track_ids = []
                     self.track_key = None
+                    self.subtitle_key = None
+                    self.loaded_generation = None
+                    self.subtitle_ids = ['off']
+                    self.subtitle_box['values'] = ['Off']
+                    self.subtitle_box.current(0)
                     self.track_box['values'] = []
                     self.track_box.set('')
                     self.audio_text.set('No movie loaded.')
@@ -445,12 +489,18 @@ class DesktopWindow:
 
     def _status(self, value):
         self.status = value
+        client = value.get('client_state', {})
+        self.library_pane.status(value)
+        generation = client.get('media_generation')
+        if client.get('loaded') and client.get('can_control') and generation != self.loaded_generation:
+            self.require_reload = False
+            self.loaded_generation = generation
         connected = value['connected']
         self.connection_text.set(('TV connected to ' if connected else 'On the TV, choose ') + value['host_name'])
         code = value['pair_code']
         self.pairing_text.set(('Connected · Code ' if connected else 'Pairing code ') + code[:3] + ' ' + code[3:])
         if connected and not self.was_connected:
-            self.tabs.select(self.player)
+            self.select_page(self.player)
         if self.was_connected and not connected:
             self.require_reload = True
             self.error_text.set('TV disconnected. Reconnect it, then reload the movie before resuming.')
@@ -487,20 +537,27 @@ class DesktopWindow:
             + ' · Lead: ' + str(value['video_lead_ms']) + ' ms · Phone calibration: ' + phone['state']
             + (' · ' + phone['error'] if phone['error'] else '')
             + (' · No phone connected' if not phone['phone_connected'] else ' · Phone connected'))
-        self.audio_text.set('TrueHD bitstream reported by mpv. Confirm Atmos on your receiver.' if value.get('audio', {}).get('valid') else 'TrueHD output has not been confirmed for this session.')
-        tracks = [t for t in value.get('audio_tracks', []) if t.get('type') == 'audio']
-        key = json.dumps(tracks, sort_keys=True)
+        badge = client.get('audio_badge', 'No audio selected')
+        self.audio_text.set(badge + ('. Original HDMI bitstream reported by mpv; check the receiver display.'
+                            if value.get('audio', {}).get('valid') else '. Audio output is not verified yet.'))
+        tracks = [t for t in client.get('audio_tracks', []) if t.get('supported', True)]
+        key = json.dumps((generation, tracks), sort_keys=True)
         if key != self.track_key:
             self.track_key = key
             self.track_ids = [t['id'] for t in tracks]
-            self.track_box['values'] = [f"{t['id']}: {t.get('lang', '')} {t.get('codec', '')} {t.get('title', '')}" for t in tracks]
+            self.track_box['values'] = [t.get('label', str(t['id'])) for t in tracks]
             selected = next((i for i, t in enumerate(tracks) if t.get('selected')), -1)
-            if selected >= 0:
-                self.track_box.current(selected)
-            elif tracks:
-                self.track_box.current(0)
-            else:
-                self.track_box.set('')
+            if selected >= 0: self.track_box.current(selected)
+            elif tracks: self.track_box.current(0)
+            else: self.track_box.set('')
+        subtitles = [t for t in client.get('subtitle_tracks', []) if t.get('supported', True)]
+        key = json.dumps((generation, subtitles, client.get('selected_subtitle', 'off')), sort_keys=True)
+        if key != self.subtitle_key:
+            self.subtitle_key = key
+            self.subtitle_ids = ['off'] + [t['id'] for t in subtitles]
+            self.subtitle_box['values'] = ['Off'] + [t.get('label', t['id']) for t in subtitles]
+            selected = client.get('selected_subtitle', 'off')
+            self.subtitle_box.current(self.subtitle_ids.index(selected) if selected in self.subtitle_ids else 0)
         if value.get('error'):
             self.error_text.set(value['error'])
         # Tokens, pairing credentials and addresses are intentionally omitted from this view.
@@ -512,6 +569,7 @@ class DesktopWindow:
 
     def _update_controls(self):
         idle = not self.busy and not self.closing
+        self.library_pane.enabled(self.running and not self.closing, self.busy)
         setup = idle and not self.running
         for control in (self.mpv_entry, self.mpv_button, self.refresh_button, self.download_button):
             control.configure(state='normal' if setup else 'disabled')
@@ -526,10 +584,11 @@ class DesktopWindow:
         loaded = ready and bool(self.status.get('file')) and not self.require_reload
         self.load_button.configure(state='normal' if ready else 'disabled')
         for control in (self.play_button, self.back_button, self.forward_button, self.resync_button,
-                        self.seek_button, self.track_button):
+                        self.seek_button, self.track_button, self.subtitle_button):
             control.configure(state='normal' if loaded else 'disabled')
         self.timeline.configure(state='normal' if loaded else 'disabled')
         self.track_box.configure(state='readonly' if loaded else 'disabled')
+        self.subtitle_box.configure(state='readonly' if loaded else 'disabled')
         self.pause_button.configure(state='normal' if self.running and self.status.get('file') and not self.closing else 'disabled')
         self.offset_button.configure(state='normal' if idle and self.running else 'disabled')
         self.browser_button.configure(state='normal' if self.running else 'disabled')
@@ -553,7 +612,7 @@ def smoke_test(path):
         root.withdraw()
         window = DesktopWindow(root, directory, auto_start=False)
         root.update()
-        assert len(window.tabs.tabs()) == 4
+        assert len(window.tabs.tabs()) == 5
         download_check = 'not configured'
         if os.environ.get('DUALTHEATER_SMOKE_DOWNLOAD') == '1':
             window.download_mpv()
@@ -603,7 +662,7 @@ def smoke_test(path):
         while not window.service.closed.wait(.05):
             root.update()
         root.destroy()
-        Path(path).write_text(json.dumps({'version': VERSION, 'gui': 'passed', 'pages': 4,
+        Path(path).write_text(json.dumps({'version': VERSION, 'gui': 'passed', 'pages': 5,
                                         'resources': 'passed', 'host_start_stop': 'passed',
                                         'external_player': player_check,
                                         'download_select': download_check,
@@ -614,7 +673,12 @@ def smoke_test(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--smoke-test', metavar='RESULT_JSON', help=argparse.SUPPRESS)
+    parser.add_argument('--verify-core', metavar='RESULT_JSON', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.verify_core:
+        from .desktop_support import verify_core
+        verify_core(args.verify_core)
+        return
     if args.smoke_test:
         smoke_test(args.smoke_test)
         return

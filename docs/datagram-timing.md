@@ -1,0 +1,24 @@
+# Dedicated timing datagrams
+
+Version 2.0 negotiates UDP timing between matching Windows and TV clients. Original movie bytes still use HTTP/TCP, and authenticated playback controls still use TCP. Audio remains untouched compressed passthrough at 1x. The v1.0 renderer clock/slew equations and saved calibration are unchanged.
+
+## Why a separate transport
+
+Hardware runs captured expired TV audio anchors despite fresh Windows source observations and ample native video buffering. A successful TCP send only proves that Windows accepted bytes; retransmission or queued bytes can delay newer timing values. UDP makes each anchor an independent latest-value message. Loss is permitted; late, reordered and duplicate anchors cannot replace a newer accepted epoch/sequence. This avoids ordered retransmission blocking later anchors; it does not guarantee delivery or eliminate network/OS scheduling limits.
+
+## Negotiation and limits
+
+- The TV advertises datagram support inside its authenticated control handshake. Windows supplies a random session timing token and the UDP port, normally **8766**, matching the control TCP port number. Custom control ports apply to both protocols.
+- The datagram endpoint must match the connected TV's network address and session token. A different UDP source port cannot take over an active timing link. Tokens/endpoints are retired with the control session.
+- A hello/ready exchange establishes the link. Pings run every 200 ms; their original timestamps are echoed. Only outstanding, non-replayed replies enter the clock model. At most 16 requests are retained. Three usable exchanges are still required for initial clock acquisition.
+- Anchors use the single latest accepted local audio observation, retaining its original timestamp, media position, epoch and sequence. The sender samples about every 40 ms; it does not queue old anchors or replay transport commands.
+- Packets are capped at 2048 bytes. Invalid tokens, unknown endpoints/nonces, malformed packets and oversized input are discarded. UDP authentication uses the same trusted-LAN assumption as the existing cleartext control connection; it is not encryption.
+- Source expiry, phase-confidence limits, TV anchor holdover and the coordinated start/progress barrier remain active. Three seconds without a valid timing reply closes the datagram link. A disconnect never independently resumes video or changes the saved offset.
+
+Older hosts/TVs retain dedicated TCP timing through capability negotiation. If Windows cannot bind UDP, it offers TCP instead. When UDP is negotiated but blocked by the network/firewall, preparation fails rather than silently claiming synchronized playback. Allow **UDP 8766** on the trusted private network for version 2.0, along with the documented control/media/discovery traffic. No router port forwarding is needed. Reload after restoring a failed timing connection.
+
+Diagnostics expose only `sync.timing_transport` (`udp`, `tcp` or `unknown`), not the endpoint or token. A completed datagram send still does not prove TV receipt; inspect remote-clock state/anchor age and actual playback.
+
+## Validation
+
+Real-socket coordinator tests cover negotiation, start/pause/seek, short anchor loss, malformed/oversized traffic, wrong tokens/endpoints, replayed/unknown ping replies, bounded outstanding requests and silence shutdown with control retained. Existing TCP tests remain in the suite. Android assembly/JVM/lint checks cover the unchanged clock/buffer contracts and compile the new transport. Actual device endurance and physical A/V sync remain separate acceptance steps; see [current results](context.md).

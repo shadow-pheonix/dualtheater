@@ -117,6 +117,43 @@ def format_time(milliseconds):
     return f'{hours}:{minutes:02}:{seconds:02}' if hours else f'{minutes}:{seconds:02}'
 
 
+def verify_core(path):
+    """Frozen-resource, local-service and library check without creating a GUI or opening HDMI."""
+    import hashlib
+    import http.client
+    import tempfile
+    from .calibration import FIXTURE_SHA256
+    root = Path(__file__).resolve().parent.parent
+    for name in ('controller.html', 'select_audio.lua', 'audio_timing.lua'):
+        if not Path(__file__).with_name(name).is_file():
+            raise RuntimeError('Missing bundled resource: ' + name)
+    if hashlib.sha256((root/'calibration-phone-SDR-TrueHD.mkv').read_bytes()).hexdigest() != FIXTURE_SHA256:
+        raise RuntimeError('Calibration reference integrity check failed')
+    with tempfile.TemporaryDirectory(prefix='dualtheater-core-') as directory:
+        runtime = HostRuntime(runtime_args('unused.exe', 'wasapi/core-check', directory, ephemeral=True))
+        try:
+            runtime.start()
+            movies = Path(directory)/'movies'; movies.mkdir()
+            grant = runtime.app.action({'action': 'library_add', 'path': str(movies)})
+            page = runtime.app.action({'action': 'browse', 'provider': 'windows', 'entry': grant['root_id']})
+            assert page['entries'] == []
+            connection = http.client.HTTPConnection('127.0.0.1', runtime.args.ui_port, timeout=5)
+            connection.request('GET', '/')
+            response = connection.getresponse(); html = response.read()
+            assert response.status == 200 and b'id="subtitles"' in html and b'id="library"' in html
+            connection.close()
+            report = json.dumps(runtime.app.diagnostic_report())
+            assert directory not in report and runtime.app.ui_token not in report
+        finally:
+            runtime.close()
+    player = 'not configured'
+    if os.environ.get('DUALTHEATER_MPV'):
+        list_devices(os.environ['DUALTHEATER_MPV'], allow_empty=True); player = 'passed'
+    Path(path).write_text(json.dumps({'version': VERSION, 'resources': 'passed',
+        'host_start_stop': 'passed', 'library': 'passed', 'diagnostics': 'passed',
+        'external_player': player, 'gui': 'not tested', 'physical_playback': 'not tested'}), encoding='utf-8')
+
+
 class DesktopService:
     """Keep slow IPC/network work off Tk's thread; preserve Coordinator transport logic."""
     def __init__(self, directory, runtime_factory=HostRuntime):
@@ -125,6 +162,7 @@ class DesktopService:
         self.runtime = None
         self.receiver_info = {}
         self.commands = queue.Queue(maxsize=8)
+        self.priority_pauses = queue.Queue(maxsize=1)
         self.events = queue.Queue()
         self.closed = threading.Event()
         self.cancel_download = threading.Event()
@@ -132,8 +170,15 @@ class DesktopService:
         self.poller = threading.Thread(target=self._poll, daemon=True)
         self.worker.start()
         self.poller.start()
+        threading.Thread(target=self._pause_work, daemon=True).start()
 
     def submit(self, operation, **values):
+        if operation == 'priority_pause':
+            if self.runtime:
+                self.runtime.app.cancel.set()
+            try: self.priority_pauses.put_nowait(True)
+            except queue.Full: pass  # Repeated Pause presses coalesce.
+            return True
         if operation == 'download_mpv':
             self.cancel_download.clear()
         if operation in ('stop', 'close'):
@@ -147,6 +192,20 @@ class DesktopService:
         except queue.Full:
             self.events.put(('error', 'Please wait for the current operation.'))
             return False
+
+    def _pause_work(self):
+        while not self.closed.is_set():
+            try: self.priority_pauses.get(timeout=.2)
+            except queue.Empty: continue
+            try:
+                runtime = self.runtime
+                if runtime and not getattr(runtime, 'closed', False):
+                    runtime.app.action({'action': 'pause'})
+                    self.events.put(('action_done', 'pause'))
+            except Exception:
+                if not self.closed.is_set(): self.events.put(('error', 'Could not pause; check the TV connection.'))
+            finally:
+                self.priority_pauses.task_done()
 
     def _work(self):
         while not self.closed.is_set():
@@ -173,6 +232,15 @@ class DesktopService:
                         raise RuntimeError('Start the TV connection first.')
                     self.runtime.app.action(values)
                     self.events.put(('action_done', values['action']))
+                elif operation == 'library':
+                    if not self.runtime:
+                        raise RuntimeError('Start the TV connection to manage your library.')
+                    if values.get('action') not in ('browse', 'providers', 'library_add', 'library_remove', 'load_entry'):
+                        raise ValueError('Unknown library operation')
+                    result = self.runtime.app.action(values)
+                    self.events.put(('library_result', {'action': values['action'], 'result': result}))
+                    if values['action'] == 'load_entry':
+                        self.events.put(('action_done', 'load'))
                 elif operation == 'export_diagnostics':
                     if not self.runtime:
                         raise RuntimeError('Start the TV connection before exporting diagnostics.')

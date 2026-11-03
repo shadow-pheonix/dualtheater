@@ -11,9 +11,15 @@ import org.json.JSONObject;
 /** Dedicated, session-authorized timing stream. No player calls on this thread. */
 final class TimingClient implements AutoCloseable {
     private volatile Socket socket;
+    private volatile DatagramSocket datagram;
     private volatile boolean closed;
     private final CountDownLatch cancelled = new CountDownLatch(1);
     void connect(String host, int port, String token, RemoteTimeline timeline, Runnable ready, Runnable failed) {
+        connect(host, port, token, timeline, ready, failed, false);
+    }
+    void connect(String host, int port, String token, RemoteTimeline timeline, Runnable ready, Runnable failed,
+                 boolean useDatagrams) {
+        if (useDatagrams) { connectDatagrams(host, port, token, timeline, ready, failed); return; }
         new Thread(() -> {
             long retryMs = 250;
             while (!closed) {
@@ -64,10 +70,77 @@ final class TimingClient implements AutoCloseable {
             }
         }, "dualtheater-timing").start();
     }
+
+    private void connectDatagrams(String host, int port, String token, RemoteTimeline timeline,
+                                  Runnable ready, Runnable failed) {
+        new Thread(() -> {
+            long retryMs = 250;
+            while (!closed) {
+                DatagramSocket s = null;
+                try {
+                    s = new DatagramSocket(); datagram = s;
+                    s.connect(InetAddress.getByName(host), port);
+                    s.setSoTimeout(250);
+                    byte[] buffer = new byte[2049];
+                    boolean acknowledged = false;
+                    while (!closed) {
+                        if (!acknowledged) sendDatagram(s, new JSONObject().put("op", "hello")
+                            .put("version", 3).put("token", token));
+                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                        try { s.receive(packet); }
+                        catch (SocketTimeoutException timeout) {
+                            if (acknowledged) throw timeout;
+                            continue;
+                        }
+                        long received = System.nanoTime();
+                        if (packet.getLength() > 2048) continue;
+                        JSONObject msg;
+                        try { msg = new JSONObject(new String(packet.getData(), packet.getOffset(),
+                                packet.getLength(), StandardCharsets.UTF_8)); }
+                        catch (org.json.JSONException malformed) { continue; }
+                        if (!java.security.MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8),
+                                msg.optString("token").getBytes(StandardCharsets.UTF_8))) continue;
+                        String op = msg.optString("op");
+                        if ("ping".equals(op)) {
+                            JSONObject reply = new JSONObject().put("op", "pong").put("token", token)
+                                .put("t0", msg.getLong("t0")).put("t1", received);
+                            reply.put("t2", System.nanoTime());
+                            sendDatagram(s, reply);
+                        } else if ("anchor".equals(op)) {
+                            timeline.accept(msg.getLong("epoch"), msg.getLong("sequence"), msg.getLong("local_ns"),
+                                Math.round(msg.getDouble("position_ms") * 1000), msg.getDouble("rate"),
+                                msg.getDouble("uncertainty_ms"), received);
+                        } else if ("timing_ready".equals(op) && msg.optInt("version") == 3 && !acknowledged) {
+                            acknowledged = true; s.setSoTimeout(3000); retryMs = 250; ready.run();
+                        }
+                    }
+                } catch (Exception error) {
+                    if (!closed) {
+                        Log.w("DTTransport", "UDP timing disconnected: " + error.getClass().getSimpleName());
+                        failed.run();
+                    }
+                } finally {
+                    if (s != null) s.close();
+                    if (datagram == s) datagram = null;
+                }
+                try { if (cancelled.await(retryMs, TimeUnit.MILLISECONDS)) break; }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); break; }
+                retryMs = Math.min(3000, retryMs * 2);
+            }
+        }, "dualtheater-timing-udp").start();
+    }
+
+    private static void sendDatagram(DatagramSocket socket, JSONObject message) throws IOException {
+        byte[] payload = message.toString().getBytes(StandardCharsets.UTF_8);
+        if (payload.length > 2048) throw new IOException("Oversized timing datagram");
+        socket.send(new DatagramPacket(payload, payload.length));
+    }
     @Override public void close() {
         closed = true;
         cancelled.countDown();
         Socket s = socket;
         try { if (s != null) s.close(); } catch (IOException ignored) {}
+        DatagramSocket d = datagram;
+        if (d != null) d.close();
     }
 }

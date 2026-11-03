@@ -2,7 +2,7 @@
 
 On the desktop **Connect** page, click **Download mpv**. The app fetches the package directly from the official upstream GitHub release, verifies it, extracts mpv and its supporting DLLs, checks startup without playing audio, selects `mpv.exe` and refreshes the audio-device list. Choose your HDMI endpoint and click **Start TV connection**. No mpv website, archive utility or path entry is needed for this flow.
 
-The first download needs Internet access and about 37 MiB of transfer; the extracted runtime uses about 101 MiB. Later launches reuse the verified local copy offline. The package stays separate from the portable EXE in `%LOCALAPPDATA%\DualTheater\players`. Moving/replacing the EXE preserves it. This is a user-initiated download, not a silent update; a future pinned version requires an app update. mpv is not included in DualTheater's EXE, source ZIP or GitHub release assets.
+The first download needs Internet access and about 37 MiB of transfer; the extracted runtime uses about 101 MiB. Later launches reuse the verified local copy offline. The package stays separate from the portable EXE in `%LOCALAPPDATA%\DualTheater-RobustSync\players` for stable 1.0/current development builds (older base builds use `DualTheater`). Moving/replacing the EXE preserves it. This is a user-initiated download, not a silent update; a future pinned version requires an app update. mpv is not included in DualTheater's EXE, source ZIP or GitHub release assets.
 
 ## Pinned upstream package
 
@@ -22,6 +22,7 @@ See [mpv source/license](https://github.com/mpv-player/mpv/tree/v0.41.0), [upstr
 ## Manual setup and recovery
 
 - **Use a working build:** choose **Browse…** and select its `mpv.exe`. Keep all of its DLLs/supporting files together. A manual choice takes priority over the managed cache when saved.
+- **Recurring sound gaps with healthy timing/cache:** compare your known-working external player before changing synchronization settings. In one development comparison, a newer user-supplied mpv removed frequent TrueHD gaps with the host/track/calibration retained. No specific codec/driver defect or universal version guarantee was established; the pinned download remains unchanged pending broader validation.
 - **Download fails:** check Internet, proxy/firewall and GitHub availability, then retry. A checksum mismatch installs nothing. Your previous player remains selected on failure. You can manually download/extract a suitable package and Browse to it.
 - **Cancel:** close the app. Cancellation is checked between network reads and extracted chunks; a stalled read can take up to its 20-second timeout before shutdown.
 - **Damaged cache:** click **Download mpv** to verify/reinstall it. A previous damaged directory is retained with a `.previous-…` suffix instead of being deleted. Once the repaired player works, you may remove that old backup yourself while the app is closed.

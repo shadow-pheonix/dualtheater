@@ -1,0 +1,12 @@
+plugins { id 'com.android.library' }
+android {
+    namespace 'dev.dualtheater.shared'
+    compileSdk 36
+    buildToolsVersion '36.1.0'
+    defaultConfig { minSdk 26 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies { testImplementation 'junit:junit:4.13.2' }

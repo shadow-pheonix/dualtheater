@@ -1,6 +1,8 @@
 # Architecture
 
-This branch implements the [Robust Sync experimental architecture](robust-sync.md), alongside an explicit baseline using main's timing algorithm. The [research decisions](sync-research.md) explain the extension points and remaining physical accuracy limits.
+Version 2.0 includes [shared client/library controls](next-client-protocol.md), embedded TV subtitles, [v1.0 video clock math with reliability fixes](drift-control.md) and [dedicated UDP timing](datagram-timing.md). See the [operating guide](next-version.md). Earlier releases retain their recorded behavior.
+
+The coordinator supports [audio-clock synchronization, an advanced video servo and an original-timing baseline](robust-sync.md). The [research decisions](sync-research.md) explain the extension points and remaining physical accuracy limits.
 
 The Windows host serves the original seekable media file byte-for-byte over HTTP. The Android TV/Google TV companion extracts video and passes it to a supported hardware MediaCodec through Media3. It has no audio renderer. The original container includes unused audio bytes; this uses additional network bandwidth but avoids remuxing and metadata changes.
 

@@ -78,7 +78,7 @@ class Mpv:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         args = [self.executable, '--no-config', '--idle=yes', '--vid=no', '--sid=no',
                 '--audio-display=no', '--pause=yes', '--keep-open=yes', '--speed=1',
-                '--audio-pitch-correction=no', '--audio-spdif=truehd',
+                '--audio-pitch-correction=no', '--audio-spdif=ac3,eac3,dts,dts-hd,truehd',
                 '--audio-exclusive=yes', '--ao=wasapi', '--audio-fallback-to-null=no',
                 '--audio-file-auto=no', '--autoload-files=no', '--osc=no',
                 '--ordered-chapters=no', '--access-references=no',
@@ -227,15 +227,28 @@ class Mpv:
     def verify(self):
         params = self.get('audio-out-params', {}) or {}
         codec = self.get('audio-codec-name', '') or ''
-        decoder = self.get('audio-decoder', '') or ''
+        selected = self.get('current-tracks/audio', {}) or {}
+        selected = selected if isinstance(selected, dict) else {}
+        profile = str(selected.get('codec-profile') or selected.get('profile') or '')
+        decoder = selected.get('decoder') or self.get('audio-decoder', '') or ''
         ao = self.get('current-ao', '') or ''
         fmt = str(params.get('format', ''))
-        valid = ao == 'wasapi' and fmt.lower() == 'spdif-truehd'
+        expected = {'truehd': {'spdif-truehd'}, 'ac3': {'spdif-ac3'}, 'eac3': {'spdif-eac3'},
+                    'dts': {'spdif-dts', 'spdif-dts-hd'}, 'dts-hd': {'spdif-dts-hd'}}
+        codec_key = str(codec).lower().replace('_', '-')
+        if codec_key in ('dts-hd-ma', 'dts-hd-hra', 'dtshd'): codec_key = 'dts-hd'
+        profile_key = profile.lower().replace('_', '-').replace(' ', '-')
+        known_dts_hd = codec_key == 'dts-hd' or 'dts-hd' in profile_key
+        formats = expected.get(codec_key, set())
+        if codec_key == 'dts' and known_dts_hd:
+            formats = {'spdif-dts-hd'}
+        expected_format = fmt.lower() if fmt.lower() in formats else ('spdif-dts-hd' if known_dts_hd else None)
+        valid = ao == 'wasapi' and expected_format is not None and fmt.lower() == expected_format
         if not self.diagnostic and not valid:
-            raise RuntimeError(f'TrueHD passthrough not confirmed: AO={ao}, format={fmt}, '
-                               f'codec={codec}, decoder={decoder}. Check HDMI endpoint and track.')
-        return {'valid': valid, 'ao': ao, 'format': fmt, 'codec': codec, 'decoder': decoder,
-                'params': params, 'diagnostic': self.diagnostic}
+            raise RuntimeError(f'Compressed passthrough not confirmed for {codec or "selected audio"}: AO={ao}, format={fmt}, '
+                               f'codec={codec}, profile={profile}, decoder={decoder}. Check HDMI endpoint and track.')
+        return {'valid': valid, 'ao': ao, 'format': fmt, 'codec': codec, 'profile': profile, 'decoder': decoder,
+                'expected_format': expected_format, 'params': params, 'diagnostic': self.diagnostic}
 
     def close(self):
         if self.proc and self.proc.poll() is None:

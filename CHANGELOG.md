@@ -1,5 +1,62 @@
 # Changelog
 
+## 2.0.0 — 2026-11-03
+
+- Promote the finalized beta.4 playback path after a 15-minute uninterrupted movie run and user-confirmed continuous audio/in-sync dialogue. Whole-movie testing remains pending.
+- Add authenticated latest-value UDP timing with TCP compatibility, original v1.0 video correction math, isolated source sampling and bounded failure detection.
+- Improve cache/extractor throughput, renderer lifecycle handling, clock confidence and long-movie positioning; correct false synchronization pauses and menu overlays.
+- Include embedded audio/subtitle choices across all clients, scoped Windows/Android movie libraries, TV audio badges, guided navigation and recommended phone calibration.
+- Retain original video/compressed audio, application IDs, private setup/calibration and all earlier release assets. No runtime or profile is bundled.
+
+The local 1.1 entries below record the development milestones incorporated into 2.0.
+
+## 1.1.0-beta.4 — v1.0 timing fallback (unreleased)
+
+- Revert post-1.0 video drift changes to the v1.0 correction math and shared transport barriers at the user's request.
+- Preserve subtitles, audio choices/defaults, browsing, UI, read-ahead and saved calibration.
+- Retain the independent full-length position conversion fix and client-state servicing.
+- Correct clock-input rejection and confidence calculation for measured path asymmetry; discard transient unusable measurements while preserving the original confidence and expiry limits.
+- Preserve bounded, privacy-safe clock observations before a failure pauses/resets playback.
+- Distinguish delayed control telemetry from a stalled renderer, tracking real frame progress independently of clock-measurement acceptance.
+- Refresh the TV library silently on connection and close its browser when loading a movie, keeping dialogs from intercepting movie remote controls.
+- Verify contiguous cache coverage and repair the first missing range instead of trusting a completed-download cursor; add allowlisted read-wait diagnostics.
+- Coalesce small extractor reads and refill cache coverage in bounded batches; retain exact original bytes, seek positions and the RAM buffer limit.
+- Isolate local audio sampling from timing-socket writes, requiring delivered progress at startup and bounding delivery loss independently of source expiry.
+- Use affine phase confidence consistently at startup/monitoring instead of also applying baseline's RTT heuristic; retain baseline RTT and all genuine expiry/stall guards.
+- Negotiate authenticated, bounded latest-value UDP timing between matching clients; keep TCP compatibility, unchanged v1.0 video math and all source/receiver expiry guards.
+- Bound TV timing holdover by both two seconds and growing confidence, retaining stale-packet/phase-jump rejection and aligning input validation with the exact host contract.
+- Keep the independent audio master advancing across native video renderer rebuffer/reset events. Debounce brief video-only refills; retain immediate audio-cache recovery and bounded persistent-video recovery, with classified diagnostics.
+- Remove experimental control-anchor fallback and retained-buffer recovery. Reverting does not establish sustained playback acceptance.
+
+## 1.1.0-beta.3 — local audio default update (unreleased)
+
+- Prefer English TrueHD Atmos on automatic load, then other TrueHD Atmos, English TrueHD and other TrueHD; retain codec fallback order and explicit overrides.
+- Recognize English language tags/titles and positive Atmos title/profile labels, excluding negative Atmos labels.
+- Follow current source-audio phase during smooth timestamp settling, preventing stale model residuals from starving fresh anchors; retain existing uncertainty/expiry/discontinuity guards.
+- Include allowlisted source-sampler status, confidence, age and rejection counts in diagnostics.
+- Add bounded TV disk read-ahead with shared download fragments, preparation priority, retries, direct-streaming fallback and sanitized cache diagnostics, preserving the RAM buffer budget.
+- Isolate TV control heartbeats from timing and optional phone sends; record categorized private control-closure reasons.
+- Use affine clock uncertainty consistently for start/monitoring; retain the baseline RTT limit and all expiry budgets.
+- Preserve full 64-bit TV positions across transport epochs beyond 35 minutes 47 seconds.
+- Align TV anchor validation with exact host-generated rate ratios and summed source/clock confidence; add bounded rejection telemetry and a direct-streaming diagnostic switch. Sustained hardware playback remains unresolved.
+
+## 1.1.0-beta.2 — local pause correction (unreleased)
+
+- Refresh network-clock confidence from current exchanges after a delay change, accounting for valid path asymmetry.
+- Track new video frames independently of accepted sync calculations, retaining genuine timing/frame-stall safety pauses.
+- Read mpv audio-choice user data in its native form, so requested tracks and automatic lossless selection are not misread as JSON-quoted option values.
+- Preserve saved calibration, original compressed audio timing and all prior release artifacts.
+
+## 1.1.0-beta.1 — local development build (unreleased)
+
+- Correct TV rate-query phase projection and add four-hour positive/negative drift simulations while retaining fixed calibration and video-only correction.
+- Embedded subtitle selection/Off and compressed audio-track choices on Windows, TV and phone; real track support flags, friendly language/layout labels and stale-menu rejection.
+- User-granted Windows folder libraries and seekable Android document-tree sharing, opaque IDs, original-byte range proxying, revocation and isolated read workers. TV can select and start a movie.
+- Small TV startup/track-change audio badge; object-audio labels require positive track metadata and are qualified.
+- Dark/teal guided navigation, scrollable Windows pages, TV options, phone player/library/help, and recommended calibration with audible-beep guidance before capture.
+- Terminal-only frozen-core verification, priority Windows Pause and software tests for authenticated clients, ranges, folder grants and rejected choices without disrupting playback.
+- Hardware/visual acceptance remains pending; stable 1.0 assets are preserved and this candidate is not published.
+
 ## 1.0.0 — stable, 2026-11-02
 
 - Promote the calibrated audio-clock build to main after the user reported excellent sync on the tested setup. Retain original timing and video servo as selectable alternatives.

@@ -3,6 +3,8 @@ logs/
 calibration.json
 pairings.json
 pairings.tmp
+library.json
+library.tmp
 settings.local.json
 .env
 .env.*
@@ -23,6 +25,7 @@ android/.gradle/
 android/build/
 android/app/build/
 android/calibration/build/
+android/shared/build/
 android/local.properties
 .idea/
 .vscode/

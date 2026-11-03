@@ -1,6 +1,6 @@
 # Synchronization modes, recovery and comparison
 
-The tested Robust Sync implementation is now stable **1.0.0** on `main`, including the phone client. The user reported excellent sync on the calibrated setup. Absolute accuracy, other hardware and long-session behavior remain under testing. Historical base/feature releases are preserved.
+Version **2.0.0** on `main` includes the Windows, TV and phone clients, preserving the v1.0 video-clock math with explicit reliability fixes. Matching clients use [UDP timing](datagram-timing.md); older clients retain TCP timing. The user reported excellent sync on the calibrated setup. Absolute accuracy, other hardware and long-session behavior remain under testing. Historical base/feature releases are preserved.
 
 ## Install and launch
 

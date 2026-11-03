@@ -36,18 +36,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools_src/build_windows.py --dist dist/windows --work build/windows
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Smoke-test packaged desktop without HDMI playback
+      - name: Verify packaged core without GUI or HDMI playback
         shell: pwsh
         run: |
           $result = Join-Path $env:RUNNER_TEMP 'desktop-smoke.json'
-          $env:DUALTHEATER_SMOKE_DOWNLOAD = '1'
           $exe = (Resolve-Path dist/windows/DualTheater.exe).Path
-          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', ('"' + $result + '"')) -WindowStyle Hidden -PassThru
+          $process = Start-Process -FilePath $exe -ArgumentList @('--verify-core', ('"' + $result + '"')) -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Desktop smoke test timed out.' }
           if ($process.ExitCode -ne 0) { throw 'Desktop smoke test failed.' }
           $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
-          if ($report.gui -ne 'passed' -or $report.host_start_stop -ne 'passed' -or $report.external_player -ne 'passed' -or $report.download_select -ne 'passed' -or $report.diagnostics -ne 'passed') { throw 'Desktop smoke test did not pass.' }
-          Write-Host 'Native GUI, bundled resources, external mpv and local host start/stop passed; physical playback was not tested.'
+          if ($report.resources -ne 'passed' -or $report.host_start_stop -ne 'passed' -or $report.external_player -ne 'passed' -or $report.library -ne 'passed' -or $report.diagnostics -ne 'passed') { throw 'Packaged core verification did not pass.' }
+          Write-Host 'Frozen resources, library, diagnostics, external mpv and host lifecycle passed; GUI and physical playback were not tested.'
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin

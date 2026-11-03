@@ -32,6 +32,7 @@ final class PhoneClient implements AutoCloseable {
                 value.setTcpNoDelay(true); value.setSoTimeout(4000);
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(value.getOutputStream(), StandardCharsets.UTF_8));
                 JSONObject hello = new JSONObject().put("op", "hello").put("version", 1).put("role", "calibration")
+                    .put("client_protocol", 1)
                     .put("client_id", clientId).put("token", code).put("device", "Calibration phone");
                 writer.write(hello.toString()); writer.newLine(); writer.flush();
                 writerThread = new Thread(() -> {
@@ -66,6 +67,29 @@ final class PhoneClient implements AutoCloseable {
             actions.put(id, action);
             if (!outbound.offer(message.toString()) || actions.size() > 64) disconnect("Host stopped responding; reconnect and retry");
         } catch (JSONException error) { disconnect("Invalid calibration message"); }
+    }
+
+    synchronized long request(String action, JSONObject values) {
+        try {
+            JSONObject message = values == null ? new JSONObject() : new JSONObject(values.toString());
+            message.put("op", "client_request").put("action", action);
+            return sendMessage(message, "client:" + action);
+        } catch (JSONException error) { disconnect("Invalid player request"); return -1; }
+    }
+
+    synchronized long registerStorage(JSONObject registration) {
+        return sendMessage(registration, "storage_register");
+    }
+
+    private long sendMessage(JSONObject values, String action) {
+        if (closed.get()) return -1;
+        try {
+            long id = sequence.incrementAndGet();
+            JSONObject message = new JSONObject(values.toString()).put("id", id);
+            actions.put(id, action);
+            if (!outbound.offer(message.toString()) || actions.size() > 64) disconnect("Host stopped responding; reconnect and retry");
+            return id;
+        } catch (JSONException error) { disconnect("Invalid player request"); return -1; }
     }
 
     private void disconnect(String reason) {

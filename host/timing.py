@@ -43,6 +43,55 @@ class AffineClock:
     def __init__(self):
         self.samples = deque(maxlen=128)
         self.lock = threading.Lock()
+        self.last_fit = None
+        self.last_fit_sample_ns = -1
+
+    def holdover(self, now):
+        with self.lock:
+            previous = self.last_fit
+        if previous is None or not 0 <= now - previous.host_ns <= 750_000_000:
+            return None
+        age = now - previous.host_ns
+        # This only bridges a temporarily unusable fit. It does not renew
+        # itself; uncertainty includes both oscillator and fitted-rate error.
+        return ClockEstimate(previous.remote(now) - now, previous.rtt_ns, now,
+            previous.rate, math.ceil(previous.uncertainty_ns + age * .002))
+
+    def observations(self, now):
+        """Bounded relative numbers for fault diagnosis; no device identifiers."""
+        with self.lock:
+            rows = list(self.samples)
+        origin = rows[-1][1] if rows else 0
+        return [{'age_ms': round((now - t) / 1e6, 3),
+                 'offset_delta_ms': round((offset - origin) / 1e6, 3),
+                 'rtt_ms': round(rtt / 1e6, 3)} for t, offset, rtt, _ in rows]
+
+    def supported_phase(self, rows, now):
+        """Track an acquired clock with sparse replies, without inventing readiness."""
+        with self.lock:
+            previous = self.last_fit
+        if previous is None or not rows:
+            return self.holdover(now)
+        predicted = previous.remote(now) - now
+        prior_uncertainty = previous.uncertainty_ns + abs(now - previous.host_ns) * .002
+        lower = max(predicted - prior_uncertainty,
+            max(s[1] - s[2] / 2 - (now - s[0]) * .001 for s in rows))
+        upper = min(predicted + prior_uncertainty,
+            min(s[1] + s[2] / 2 + (now - s[0]) * .001 for s in rows))
+        if lower > upper:
+            return self.holdover(now)
+        # The midpoint minimizes worst-case phase error over the supported
+        # interval. Keeping a prior estimate at one edge can unnecessarily
+        # exhaust the confidence budget despite a usable current exchange.
+        phase = (lower + upper) / 2
+        estimate = ClockEstimate(round(phase), min(s[2] for s in rows), now, previous.rate,
+            math.ceil(max(phase - lower, upper - phase) + 100_000))
+        newest = max(s[3] for s in rows)
+        with self.lock:
+            # Re-polling the same exchanges must not renew the fallback model.
+            if newest > self.last_fit_sample_ns and self.last_fit.host_ns <= now:
+                self.last_fit, self.last_fit_sample_ns = estimate, newest
+        return estimate
 
     def add(self, t0, t1, t2, t3):
         if any(type(t) is not int or abs(t) > 2**63 - 1 for t in (t0, t1, t2, t3)):
@@ -59,20 +108,27 @@ class AffineClock:
 
     def best(self, now):
         with self.lock:
-            rows = [s for s in self.samples if 0 <= now - s[0] <= 15_000_000_000]
+            # Use live observations for v1.0's unchanged regression. An old
+            # minimum RTT must not exclude all healthy replies for 15 seconds.
+            rows = [s for s in self.samples if 0 <= now - s[0] <= 3_000_000_000]
         if len(rows) < 3:
-            return None
+            return self.supported_phase(rows, now)
         lowest = min(s[2] for s in rows)
         threshold = max(lowest + 2_000_000, sorted(s[2] for s in rows)[2])
         rows = [s for s in rows if s[2] <= threshold]
         if len(rows) < 3:
-            return None
+            return self.holdover(now)
         origin = rows[-1][0]
         center = median(s[1] for s in rows)
-        # Reject gross phase outliers before rate fitting, allowing clock drift.
-        rows = [s for s in rows if abs(s[1] - center) <= 2_000_000 + abs(s[0] - origin) * .001]
+        # Network asymmetry can move an exchange's midpoint by up to RTT/2.
+        # A fixed 2 ms phase filter discarded mutually compatible live replies
+        # (e.g. 6/11/13 ms RTT), manufacturing expiry during healthy playback.
+        # Keep the regression/rate bounds; include the measured delay envelope
+        # in outlier selection and retain its residual in the confidence budget.
+        rows = [s for s in rows if abs(s[1] - center) <=
+                max(2_000_000, (s[2] + lowest) / 2) + abs(s[0] - origin) * .001]
         if len(rows) < 3:
-            return None
+            return self.holdover(now)
         weights = [1 / max(200_000, s[2])**2 for s in rows]
         total = sum(weights)
         xmean = sum((s[0] - origin) * w for s, w in zip(rows, weights)) / total
@@ -85,12 +141,23 @@ class AffineClock:
         # Revert to offset-only and retain the larger residual in its budget.
         if abs(slope) > .001:
             slope = 0
-        offset = ymean - slope * xmean
-        residual = max(abs(s[1] - (offset + slope * (s[0] - origin))) for s in rows)
-        age = now - origin
-        uncertainty = lowest / 2 + residual + 100_000 + age * .001
-        return ClockEstimate(round(offset + slope * age), lowest, now,
-                             1 + slope, math.ceil(uncertainty))
+        # Each exchange bounds the offset by its own RTT/2, expanded to now
+        # using the oscillator bound. Residual + minimum RTT double-counted
+        # compatible path asymmetry and could exceed 12 ms with a narrow valid
+        # interval. Intersect the actual bounds, without assuming symmetry.
+        lower = max(s[1] - s[2] / 2 - (now - s[0]) * .001 for s in rows)
+        upper = min(s[1] + s[2] / 2 + (now - s[0]) * .001 for s in rows)
+        if lower > upper:
+            return self.holdover(now)
+        phase = (lower + upper) / 2
+        uncertainty = max(phase - lower, upper - phase) + 100_000
+        estimate = ClockEstimate(round(phase), lowest, now,
+                                 1 + slope, math.ceil(uncertainty))
+        with self.lock:
+            newest = max(s[3] for s in rows)
+            if self.last_fit is None or self.last_fit.host_ns <= now and newest > self.last_fit_sample_ns:
+                self.last_fit, self.last_fit_sample_ns = estimate, newest
+        return estimate
 
 
 class AudioTimeline:
@@ -121,11 +188,14 @@ class AudioTimeline:
             xm, ym = sum(xs) / len(xs), sum(ys) / len(ys)
             rate = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / sum((x - xm)**2 for x in xs)
             rate = max(.999, min(1.001, rate))
-        intercept = median(r[1] - rate * ((r[0] - t) / 1e6) for r in rows)
-        residual = max(abs(r[1] - (intercept + rate * ((r[0] - t) / 1e6))) for r in rows)
+        # Keep v1.0's rate fit; current phase must not inherit an old settling
+        # residual that rejects every otherwise fresh source observation.
+        phase_rows = [r for r in rows if t - r[0] <= 250_000_000]
+        intercept = median(r[1] - rate * ((r[0] - t) / 1e6) for r in phase_rows)
+        residual = max(abs(r[1] - (intercept + rate * ((r[0] - t) / 1e6))) for r in phase_rows)
         self.sequence += 1
         return {'sequence': self.sequence, 'host_ns': t, 'position_ms': intercept, 'rate': rate,
-                'uncertainty_ms': max(r[2] for r in rows) + residual,
+                'uncertainty_ms': max(r[2] for r in phase_rows) + residual,
                 'source': sample.get('source', 'ipc_midpoint')}
 
 

@@ -2,6 +2,10 @@ package dev.dualtheater.calibration;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import dev.dualtheater.shared.StorageShare;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.*;
@@ -21,6 +25,13 @@ public final class MainActivity extends Activity {
     private EditText address, port, code;
     private TextView status, progress, result, problem;
     private Button connectButton, findButton, startButton, cancelButton, applyButton;
+    private StorageShare storageShare;
+    private PhoneControls remote;
+    private FrameLayout pages;
+    private final Map<String, View> pageViews = new LinkedHashMap<>();
+    private final Map<String, Button> navigation = new LinkedHashMap<>();
+    private boolean clientProtocol, volumeReady, reconnectAfterPicker;
+    private String activePage = "Connect";
     private CameraPreview preview;
     private PhoneClient client;
     private Discovery discovery;
@@ -35,32 +46,80 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.HORIZONTAL);
-        layout.setPadding(dp(14), dp(10), dp(14), dp(10));
+        getWindow().setStatusBarColor(PhoneControls.BACKGROUND);
+        getWindow().setNavigationBarColor(PhoneControls.BACKGROUND);
+        storageShare = new StorageShare(this);
+        LinearLayout shell = new LinearLayout(this); shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(PhoneControls.BACKGROUND); shell.setPadding(dp(14), dp(6), dp(14), dp(6));
+        label(shell, "DualTheater", 22).setTextColor(PhoneControls.ACCENT);
+        status = label(shell, "Start Windows, connect the TV, then pair this phone.", 14);
+        LinearLayout nav = new LinearLayout(this); shell.addView(nav);
+        for (String name : new String[]{"Connect", "Library", "Player", "Calibrate", "Help"}) {
+            Button tab = new Button(this); tab.setText(name); tab.setAllCaps(false); tab.setTextColor(PhoneControls.TEXT);
+            nav.addView(tab, new LinearLayout.LayoutParams(0, dp(46), 1)); navigation.put(name, tab);
+            tab.setOnClickListener(v -> showPage(name));
+        }
+        pages = new FrameLayout(this); shell.addView(pages, new LinearLayout.LayoutParams(-1, 0, 1));
+        remote = new PhoneControls(this, new PhoneControls.Commands() {
+            @Override public long request(String action, JSONObject values) {
+                if (!connected || !clientProtocol || client == null) {
+                    problem.setText("Connect to the matching Windows version for player and library controls."); return -1;
+                }
+                if (warming || starting || active()) { problem.setText("Finish or cancel calibration before controlling a movie."); return -1; }
+                return client.request(action, values);
+            }
+            @Override public void chooseStorage() { chooseStorageFolder(); }
+            @Override public void stopSharing() {
+                storageShare.forgetTree();
+                if (connected && clientProtocol) client.request("storage_unregister", null);
+                problem.setText("Phone folder is no longer shared. Windows and TV playback controls remain available.");
+            }
+        });
+        pageViews.put("Connect", connectView()); pageViews.put("Library", remote.libraryView());
+        pageViews.put("Player", remote.playerView()); pageViews.put("Calibrate", calibrationView());
+        pageViews.put("Help", remote.helpView());
+        for (View view : pageViews.values()) pages.addView(view, new FrameLayout.LayoutParams(-1, -1));
+        problem = label(shell, "", 14); problem.setTextColor(0xffff9292);
+        setContentView(shell); showPage("Connect"); controls();
+    }
+
+    private View connectView() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(0, 0, dp(16), 0); scroll.addView(panel);
-        layout.addView(scroll, new LinearLayout.LayoutParams(0, -1, 1.2f));
-        TextView title = label(panel, "DualTheater Calibration", 22);
-        title.setPadding(0, 0, 0, dp(8));
-        label(panel, "Place the phone at your listening seat and center the TV in the guide. Camera and microphone run only during a test; captures are not saved or uploaded.", 14);
+        panel.setPadding(dp(12), dp(8), dp(12), dp(8)); scroll.addView(panel);
+        label(panel, "Connect to Windows", 22);
+        label(panel, "Open DualTheater on the laptop or PC and start the TV connection. Select that computer below and enter its six-digit code once. Saved pairings reconnect without a new code.", 15);
         hostList = new LinearLayout(this); hostList.setOrientation(LinearLayout.VERTICAL); panel.addView(hostList);
         findButton = button(panel, "Find computers", this::findHosts);
         SharedPreferences prefs = getPreferences(MODE_PRIVATE);
-        address = edit(panel, "Windows LAN address", prefs.getString("address", ""), InputType.TYPE_CLASS_TEXT);
-        port = edit(panel, "Control port", prefs.getString("port", "8766"), InputType.TYPE_CLASS_NUMBER);
-        code = edit(panel, "Six-digit pairing code (leave empty for saved pairing)", "", InputType.TYPE_CLASS_NUMBER);
+        LinearLayout advanced = new LinearLayout(this); advanced.setOrientation(LinearLayout.VERTICAL);
+        button(panel, "Advanced connection", () -> advanced.setVisibility(advanced.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        panel.addView(advanced); advanced.setVisibility(View.GONE);
+        address = edit(advanced, "Windows address (only if discovery is blocked)", prefs.getString("address", ""), InputType.TYPE_CLASS_TEXT);
+        port = edit(advanced, "Control port", prefs.getString("port", "8766"), InputType.TYPE_CLASS_NUMBER);
+        code = edit(panel, "Six-digit code · leave empty for saved pairing", "", InputType.TYPE_CLASS_NUMBER);
         selectedId = prefs.getString("host_id", ""); selectedAddress = address.getText().toString();
         try { selectedPort = Integer.parseInt(port.getText().toString()); } catch (NumberFormatException ignored) {}
         connectButton = button(panel, "Connect", this::connect);
-        status = label(panel, "Start the matching Windows app and connect its TV companion first.", 16);
-        label(panel, "Start replaces the current movie with a 22-second SDR/stereo TrueHD test, without Atmos. Keep the camera still and the room quiet. No reference fixture is required.", 14);
+        button(panel, "Disconnect", () -> { if (client != null) client.close(); });
+        label(panel, "No computer found? Keep devices on the same trusted network, allow DualTheater through the Windows private-network firewall, and check that a VPN or guest network is not isolating them. Use Help for setup steps.", 14).setTextColor(PhoneControls.MUTED);
+        return scroll;
+    }
+
+    private View calibrationView() {
+        LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.HORIZONTAL);
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(12), 0, dp(16), 0); scroll.addView(panel);
+        layout.addView(scroll, new LinearLayout.LayoutParams(0, -1, 1.2f));
+        label(panel, "Calibrate · recommended", 22).setTextColor(PhoneControls.ACCENT);
+        label(panel, "Raise the soundbar/receiver volume so the beeps are clearly audible at the phone. Place the phone steadily at your listening seat, center the TV in the guide and keep the room quiet.", 15);
+        label(panel, "Start temporarily replaces the movie with a 22-second flash/beep test. Measure, review, Apply, then verify and reload the movie. Camera and microphone run only during the test; recordings are not saved.", 14).setTextColor(PhoneControls.MUTED);
         startButton = button(panel, "Start calibration / verify again", this::startCapture);
         cancelButton = button(panel, "Cancel test", this::cancel);
         progress = label(panel, "", 14);
-        result = label(panel, "No measurement yet. Capture timestamps provide an estimate; absolute accuracy has not been externally validated.", 15);
+        result = label(panel, "No measurement yet. Raise the receiver volume before starting so the microphone can detect all six beeps.", 15);
         applyButton = button(panel, "Apply suggested Video lead", this::apply);
-        problem = label(panel, "", 15); problem.setTextColor(0xffffb4a8);
         FrameLayout cameraArea = new FrameLayout(this); cameraArea.setBackgroundColor(Color.BLACK);
         preview = new CameraPreview(this); preview.setAlpha(0f);
         cameraArea.addView(preview, new FrameLayout.LayoutParams(-1, -1));
@@ -68,29 +127,64 @@ public final class MainActivity extends Activity {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private final android.graphics.RectF bounds = new android.graphics.RectF();
             @Override protected void onDraw(Canvas canvas) {
-                paint.setColor(0xff44dfcd); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2));
+                paint.setColor(PhoneControls.ACCENT); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2));
                 preview.guideBounds(bounds); canvas.drawRect(bounds, paint);
-                paint.setStyle(Paint.Style.FILL); paint.setTextSize(dp(15));
-                canvas.drawText("Center the TV flash area here", dp(12), dp(30), paint);
+                paint.setStyle(Paint.Style.FILL); paint.setTextSize(dp(14));
+                canvas.drawText("Center the TV flash area here", dp(12), dp(28), paint);
             }
         };
-        preview.setGeometryChanged(guide::invalidate);
-        cameraArea.addView(guide, new FrameLayout.LayoutParams(-1, -1));
-        layout.addView(cameraArea, new LinearLayout.LayoutParams(0, -1, 1));
-        setContentView(layout); controls();
+        preview.setGeometryChanged(guide::invalidate); cameraArea.addView(guide, new FrameLayout.LayoutParams(-1, -1));
+        layout.addView(cameraArea, new LinearLayout.LayoutParams(0, -1, 1)); return layout;
+    }
+
+    private void showPage(String name) {
+        if ((warming || starting || active()) && !name.equals("Calibrate")) {
+            problem.setText("Finish or cancel calibration before leaving this screen."); return;
+        }
+        activePage = name;
+        for (Map.Entry<String, View> page : pageViews.entrySet()) page.getValue().setVisibility(page.getKey().equals(name) ? View.VISIBLE : View.GONE);
+        for (Map.Entry<String, Button> tab : navigation.entrySet()) {
+            tab.getValue().setTextColor(tab.getKey().equals(name) ? PhoneControls.BACKGROUND : PhoneControls.TEXT);
+            tab.getValue().setBackgroundTintList(android.content.res.ColorStateList.valueOf(tab.getKey().equals(name) ? PhoneControls.ACCENT : PhoneControls.CARD));
+        }
+    }
+
+    private void chooseStorageFolder() {
+        if (warming || starting || active()) { problem.setText("Finish or cancel calibration before changing shared storage."); return; }
+        reconnectAfterPicker = connected;
+        try { startActivityForResult(StorageShare.pickerIntent(), 41); }
+        catch (android.content.ActivityNotFoundException error) { problem.setText("This device has no folder picker. Share a Windows folder instead."); }
+    }
+
+    private void registerStorage() {
+        if (!connected || !clientProtocol || !foreground || !storageShare.hasTree()) return;
+        try { JSONObject registration = storageShare.start().put("label", "Phone storage"); client.registerStorage(registration); }
+        catch (Exception error) { problem.setText("Phone folder is unavailable. Choose it again in Library; use local, seekable storage."); }
+    }
+
+    @Override protected void onActivityResult(int request, int resultCode, Intent data) {
+        super.onActivityResult(request, resultCode, data);
+        if (request != 41) return;
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                Uri tree = data.getData(); getContentResolver().takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                storageShare.setTree(tree);
+            } catch (Exception error) { problem.setText("Folder permission was not retained. Choose a local folder and allow read access."); }
+        }
+        main.post(() -> { if (reconnectAfterPicker && foreground && !connected && !connecting) connect(); else registerStorage(); reconnectAfterPicker = false; });
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private TextView label(LinearLayout parent, String text, int size) {
-        TextView value = new TextView(this); value.setText(text); value.setTextSize(size);
+        TextView value = new TextView(this); value.setText(text); value.setTextSize(size); value.setTextColor(PhoneControls.TEXT);
         value.setPadding(0, dp(5), 0, dp(5)); parent.addView(value); return value;
     }
     private Button button(LinearLayout parent, String text, Runnable action) {
-        Button value = new Button(this); value.setText(text); value.setOnClickListener(v -> action.run()); parent.addView(value); return value;
+        Button value = new Button(this); value.setText(text); value.setAllCaps(false); value.setTextColor(PhoneControls.TEXT); PhoneControls.card(value); value.setOnClickListener(v -> action.run()); parent.addView(value); return value;
     }
     private EditText edit(LinearLayout parent, String hint, String text, int type) {
         EditText value = new EditText(this); value.setHint(hint); value.setText(text); value.setInputType(type);
-        value.setSingleLine(true); parent.addView(value); return value;
+        value.setSingleLine(true); value.setTextColor(PhoneControls.TEXT); value.setHintTextColor(PhoneControls.MUTED); parent.addView(value); return value;
     }
 
     private void findHosts() {
@@ -137,7 +231,7 @@ public final class MainActivity extends Activity {
             @Override public void disconnected(String reason) {
                 main.post(() -> {
                     if (client != connection[0]) return;
-                    stopCapture(); connected = false; connecting = false; remoteState = "idle";
+                    stopCapture(); storageShare.close(); connected = false; connecting = false; remoteState = "idle";
                     status.setText(reason); controls();
                 });
             }
@@ -149,11 +243,18 @@ public final class MainActivity extends Activity {
 
     private void handle(JSONObject message, String action, String expectedHost, String host, int controlPort) {
         try {
+            if (message.optString("op").equals("client_state")) { remote.state(message.optJSONObject("state")); controls(); return; }
+            if (message.optString("op").equals("client_response")) {
+                remote.response(message, action);
+                if (!message.optBoolean("ok", true)) problem.setText(message.optString("error", "Player request failed; check Windows."));
+                return;
+            }
             if (message.optString("op").equals("auth_required")) {
                 problem.setText(message.optString("error", "Enter the current pairing code")); client.close(); return;
             }
             if (message.optString("op").equals("welcome")) {
                 captureDiagnostics = message.optBoolean("capture_diagnostics", false);
+                clientProtocol = message.optInt("client_protocol") == 1;
                 if (connected || !message.optString("role").equals("calibration") || message.optInt("calibration_protocol") != 1)
                     throw new IllegalStateException("Use the matching Windows app with phone calibration support");
                 String hostId = UUID.fromString(message.getString("host_id")).toString();
@@ -165,7 +266,7 @@ public final class MainActivity extends Activity {
                 selectedId = hostId; selectedAddress = host; selectedPort = controlPort;
                 connected = true; connecting = false; code.setText("");
                 if (discovery != null) discovery.close();
-                client.startPolling();
+                client.startPolling(); registerStorage();
             }
             if (message.has("ok") && !message.optBoolean("ok")) {
                 Log.w("DTCalibration", "host_rejected: " + message.optString("error", "Calibration command failed"));
@@ -206,11 +307,18 @@ public final class MainActivity extends Activity {
 
     private void startCapture() {
         if (!connected || warming || starting || active()) return;
+        if (!volumeReady) {
+            new AlertDialog.Builder(this).setTitle("Make the test beeps audible")
+                .setMessage("Increase the soundbar or receiver volume until beeps can be heard clearly at the phone. Keep the phone steady at the listening seat and the room quiet. This test temporarily replaces your movie; reload it afterward.")
+                .setPositiveButton("Volume is ready · start", (dialog, which) -> { if (foreground && connected) { volumeReady = true; startCapture(); } })
+                .setNegativeButton("Not yet", null).show(); return;
+        }
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
             || checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             permissionStart = true;
             requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 10); return;
         }
+        volumeReady = false; showPage("Calibrate");
         problem.setText(""); result.setText("Measuring physical light and sound. Keep the TV centered and remain quiet.");
         warming = true; controls(); preview.setAlpha(1f);
         lastCaptureProgress = "";
@@ -272,6 +380,7 @@ public final class MainActivity extends Activity {
     }
     private void controls() {
         if (connectButton == null) return;
+        if (remote != null) remote.connected(connected && clientProtocol, warming || starting || active());
         connectButton.setEnabled(!connected && !connecting); findButton.setEnabled(!connected && !connecting);
         address.setEnabled(!connected && !connecting); port.setEnabled(!connected && !connecting); code.setEnabled(!connected && !connecting);
         startButton.setEnabled(connected && !warming && !starting && !active());
@@ -288,7 +397,7 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() { super.onStart(); foreground = true; }
     @Override protected void onResume() { super.onResume(); if (!connected && !connecting) findHosts(); }
     @Override protected void onStop() {
-        foreground = false; permissionStart = false; stopCapture();
+        foreground = false; permissionStart = false; volumeReady = false; stopCapture(); storageShare.close();
         if (discovery != null) discovery.close();
         if (client != null) client.close();
         connected = false; connecting = false; remoteState = "idle"; controls(); super.onStop();

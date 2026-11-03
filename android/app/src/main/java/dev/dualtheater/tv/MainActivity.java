@@ -13,13 +13,17 @@ import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import androidx.media3.common.*;
+import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.*;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.SubtitleView;
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener;
+import androidx.media3.exoplayer.upstream.DefaultAllocator;
+import dev.dualtheater.shared.StorageShare;
 import org.json.*;
 import java.util.*;
 
@@ -29,6 +33,7 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private ExoPlayer player;
     private SurfaceView surface;
+    private SubtitleView subtitleView;
     private FrameLayout root;
     private float videoAspect = 16f / 9f;
     private LinearLayout setup;
@@ -38,11 +43,12 @@ public final class MainActivity extends Activity {
     private final Map<String, Button> hostButtons = new LinkedHashMap<>();
     private final Set<String> autoAttempted = new HashSet<>();
     private DiscoveredHost selectedHost;
-    private boolean connecting, authRequired, foreground;
+    private boolean connecting, authRequired;
+    private volatile boolean foreground;
     private AlertDialog codeDialog;
     private TextView info;
     private EditText hostInput, portInput, tokenInput;
-    private ControlClient client;
+    private volatile ControlClient client;
     private TimingClient timingClient;
     private boolean timingReconnecting;
     private static final String TIMING_ERROR = "Timing connection lost; reconnecting. Playback remains paused.";
@@ -61,12 +67,37 @@ public final class MainActivity extends Activity {
     private long seekSerial = 0;
     private JSONArray capabilities;
     private int[] hdrTypes = new int[0];
-    private boolean destroyed = false;
+    private volatile boolean destroyed = false;
     private int bufferBudgetBytes;
+    private DefaultAllocator bufferAllocator;
+    private ReadAheadCache readAheadCache;
     private long droppedVideoFrames;
     private double transferMbps = -1;
     private long transferSampleNs;
     private final RemoteControls remote = new RemoteControls();
+    private StorageShare storageShare;
+    private long clientRequestId = 0;
+    private long latestProvidersRequest = -1, latestBrowseRequest = -1;
+    private static final class ClientRequest {
+        final String action;
+        final long viewGeneration, epoch, mediaGeneration;
+        ClientRequest(String action, long viewGeneration, long epoch, long mediaGeneration) {
+            this.action = action; this.viewGeneration = viewGeneration; this.epoch = epoch; this.mediaGeneration = mediaGeneration;
+        }
+    }
+    private final Map<Long, ClientRequest> clientRequests = new HashMap<>();
+    private long uiGeneration = 0, menuEpoch = -1, menuMediaGeneration = -1;
+    private JSONObject clientState = new JSONObject();
+    private String browserProvider = "windows", browserEntry = "";
+    private final Deque<String> browserParents = new ArrayDeque<>();
+    private TextView audioBadge;
+    private String lastAudioBadge = "";
+    private long lastMediaGeneration = -1;
+    private long displayedBadgeGeneration = -1;
+    private final Runnable hideAudioBadge = () -> { if (audioBadge != null) audioBadge.setVisibility(View.GONE); };
+    private LinearLayout playbackMenu;
+    private ScrollView playbackMenuScroll;
+    private AlertDialog libraryDialog;
     private LinearLayout transport;
     private TextView transportTitle, transportState, transportTime, transportHint;
     private ProgressBar progress;
@@ -90,27 +121,48 @@ public final class MainActivity extends Activity {
         });
         surface = new SurfaceView(this);
         root.addView(surface, new FrameLayout.LayoutParams(-1, -1));
+        subtitleView = new SubtitleView(this);
+        subtitleView.setUserDefaultStyle(); subtitleView.setUserDefaultTextSize();
+        subtitleView.setApplyEmbeddedStyles(true); subtitleView.setApplyEmbeddedFontSizes(true);
+        subtitleView.setFocusable(false);
+        root.addView(subtitleView, new FrameLayout.LayoutParams(-1, -1));
         setup = new LinearLayout(this); setup.setOrientation(LinearLayout.VERTICAL);
-        setup.setPadding(dp(28), dp(18), dp(28), dp(18)); setup.setBackgroundColor(0xee10151c);
-        TextView title = new TextView(this); title.setText("DualTheater TV"); title.setTextSize(28);
+        setup.setPadding(dp(36), dp(22), dp(36), dp(22)); setup.setBackgroundColor(0xee101827);
+        TextView title = new TextView(this); title.setText("DualTheater TV"); title.setTextSize(30);
+        title.setTextColor(0xfff4f7fb);
         setup.addView(title);
         SharedPreferences prefs = getPreferences(MODE_PRIVATE);
         TextView help = new TextView(this);
-        help.setText("Start DualTheater on your laptop, then choose it below. Paired laptops reconnect automatically.");
-        help.setTextSize(16); setup.addView(help);
+        help.setText("CONNECT  •  Choose your laptop on the same home network. Pair once with its six-digit code.");
+        help.setTextSize(18); help.setTextColor(0xffb8c6d9); setup.addView(help);
+        Button browseHome = new Button(this); browseHome.setText("Browse movies");
+        styleButton(browseHome);
+        browseHome.setOnClickListener(v -> showProviders()); setup.addView(browseHome);
+        Button shareFolder = new Button(this); shareFolder.setText("Share a TV folder");
+        styleButton(shareFolder);
+        shareFolder.setOnClickListener(v -> chooseStorageTree()); setup.addView(shareFolder);
+        TextView libraryHelp = new TextView(this);
+        libraryHelp.setText("LIBRARY  •  Browse shared laptop folders or choose a folder on this TV. The file stays on its device.");
+        libraryHelp.setTextSize(15); libraryHelp.setTextColor(0xffb8c6d9); setup.addView(libraryHelp);
+        TextView troubleshooting = new TextView(this);
+        troubleshooting.setText("If the computer is missing, start DualTheater on Windows, use the same home network and allow it through the Windows firewall.");
+        troubleshooting.setTextSize(15); troubleshooting.setTextColor(0xffb8c6d9); setup.addView(troubleshooting);
         discoveryPanel = new LinearLayout(this); discoveryPanel.setOrientation(LinearLayout.VERTICAL);
         setup.addView(discoveryPanel);
         DiscoveredHost remembered = rememberedHost();
         if (remembered != null) {
             Button reconnect = new Button(this); reconnect.setText("Reconnect to " + remembered.name);
+            styleButton(reconnect);
             reconnect.setOnClickListener(v -> chooseHost(remembered, false)); discoveryPanel.addView(reconnect);
         }
         ScrollView hosts = new ScrollView(this); hosts.setFillViewport(false);
         hostList = new LinearLayout(this); hostList.setOrientation(LinearLayout.VERTICAL); hosts.addView(hostList);
         discoveryPanel.addView(hosts, new LinearLayout.LayoutParams(-1, dp(112)));
         Button refresh = new Button(this); refresh.setText("Find laptops");
+        styleButton(refresh);
         refresh.setOnClickListener(v -> startDiscovery(true)); discoveryPanel.addView(refresh);
         Button showAdvanced = new Button(this); showAdvanced.setText("Advanced connection");
+        styleButton(showAdvanced);
         setup.addView(showAdvanced);
         advanced = new LinearLayout(this); advanced.setOrientation(LinearLayout.VERTICAL); advanced.setVisibility(View.GONE);
         setup.addView(advanced);
@@ -124,12 +176,14 @@ public final class MainActivity extends Activity {
         portInput = input("Control port", prefs.getString("port", "8766"), InputType.TYPE_CLASS_NUMBER);
         tokenInput = input("Pairing code from Windows controller", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         Button connect = new Button(this); connect.setText("Connect");
+        styleButton(connect);
         connect.setOnClickListener(v -> { selectedHost = null; connect(); }); advanced.addView(connect);
         info = new TextView(this); info.setText("Searching for laptops on your home network…");
         setup.addView(info);
         root.addView(setup, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
         setContentView(root);
         createTransport();
+        createAudioBadge();
         createPlayer();
         capabilities = codecCapabilities();
         Display display = getWindowManager().getDefaultDisplay();
@@ -182,6 +236,7 @@ public final class MainActivity extends Activity {
         Button button = hostButtons.get(host.id);
         if (button == null) {
             button = new Button(this); hostButtons.put(host.id, button); hostList.addView(button);
+            styleButton(button);
             final String id = host.id;
             button.setOnClickListener(v -> chooseHost(foundHosts.get(id), false));
             if (hostButtons.size() == 1 && advanced.getVisibility() != View.VISIBLE && !connecting) button.requestFocus();
@@ -222,6 +277,18 @@ public final class MainActivity extends Activity {
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private void styleButton(Button button) {
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        GradientDrawable focused = new GradientDrawable(); focused.setColor(0xff45d7c8); focused.setCornerRadius(dp(10));
+        GradientDrawable normal = new GradientDrawable(); normal.setColor(0xff1b293d); normal.setCornerRadius(dp(10));
+        GradientDrawable pressed = new GradientDrawable(); pressed.setColor(0xff296c6a); pressed.setCornerRadius(dp(10));
+        states.addState(new int[]{android.R.attr.state_pressed}, pressed);
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, normal); button.setBackground(states);
+        button.setTextColor(new ColorStateList(new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
+            new int[]{0xff101827, 0xfff4f7fb})); button.setMinHeight(dp(54)); button.setFocusable(true);
+    }
 
     private TextView transportText(float size, int color) {
         TextView text = new TextView(this); text.setTextSize(size); text.setTextColor(color);
@@ -286,7 +353,7 @@ public final class MainActivity extends Activity {
         progress.setProgress(duration > 0 ? (int)Math.max(0, Math.min(10000, position * 10000 / duration)) : 0);
         progress.setSecondaryProgress(duration > 0
             ? (int)Math.max(0, Math.min(10000, player.getBufferedPosition() * 10000 / duration)) : 0);
-        transportHint.setText(remoteSupported ? "← / →  Seek 10 seconds     •     OK  Play / pause"
+        transportHint.setText(remoteSupported ? "← / →  Seek     •     OK  Play / pause     •     ↑  Options"
             : "Update the Windows host to enable TV remote controls");
     }
 
@@ -332,7 +399,12 @@ public final class MainActivity extends Activity {
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (player == null || setup.getVisibility() == View.VISIBLE || player.getMediaItemCount() == 0)
             return super.dispatchKeyEvent(event);
+        if (playbackMenuScroll != null && playbackMenuScroll.getParent() == root) return super.dispatchKeyEvent(event);
         int key = event.getKeyCode();
+        if (key == KeyEvent.KEYCODE_MENU || key == KeyEvent.KEYCODE_SETTINGS) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) showPlaybackMenu("");
+            return true;
+        }
         boolean back = key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_MEDIA_REWIND;
         boolean forward = key == KeyEvent.KEYCODE_DPAD_RIGHT || key == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD;
         boolean toggle = key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER
@@ -365,7 +437,11 @@ public final class MainActivity extends Activity {
             }
             return true;
         }
-        if (key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN) {
+        if (key == KeyEvent.KEYCODE_DPAD_UP) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) showPlaybackMenu("");
+            return true;
+        }
+        if (key == KeyEvent.KEYCODE_DPAD_DOWN) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) showTransport();
             return true;
         }
@@ -387,28 +463,34 @@ public final class MainActivity extends Activity {
                 }
                 return hardware;
             });
-        RenderersFactory videoOnly = (handler, video, audio, text, metadata) -> {
+        RenderersFactory videoAndText = (handler, video, audio, text, metadata) -> {
             List<Renderer> out = new ArrayList<>();
             for (Renderer r : defaults.createRenderers(handler, video, audio, text, metadata)) {
                 if (r.getTrackType() == C.TRACK_TYPE_VIDEO) {
                     audioClockRenderer = new AudioClockRenderer(r, audioTimeline);
                     out.add(audioClockRenderer);
-                }
+                } else if (r.getTrackType() == C.TRACK_TYPE_TEXT) out.add(r);
             }
             return out.toArray(new Renderer[0]);
         };
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
             .setConnectTimeoutMs(5000).setReadTimeoutMs(10000).setUserAgent("DualTheater/0.1");
+        DefaultHttpDataSource.Factory readAheadHttp = new DefaultHttpDataSource.Factory()
+            .setConnectTimeoutMs(2000).setReadTimeoutMs(2500).setUserAgent("DualTheater/0.1");
+        readAheadCache = new ReadAheadCache(this, http, readAheadHttp,
+            !getIntent().getBooleanExtra("disable_read_ahead", false));
         // Keep most of the Java heap available for the player, extractor
         // and UI rather than filling the heap with buffered samples.
         bufferBudgetBytes = (int)Math.max(8L * 1024 * 1024,
             Math.min(64L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 4));
+        bufferAllocator = new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE);
         DefaultLoadControl load = new DefaultLoadControl.Builder()
+            .setAllocator(bufferAllocator)
             .setBufferDurationsMs(15000, 45000, 3000, 5000)
             .setTargetBufferBytes(bufferBudgetBytes)
             .setPrioritizeTimeOverSizeThresholds(false).build();
-        player = new ExoPlayer.Builder(this, videoOnly)
-            .setMediaSourceFactory(new DefaultMediaSourceFactory(http))
+        player = new ExoPlayer.Builder(this, videoAndText)
+            .setMediaSourceFactory(new DefaultMediaSourceFactory(readAheadCache.foregroundFactory()))
             .setLoadControl(load).build();
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
@@ -418,6 +500,8 @@ public final class MainActivity extends Activity {
         player.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS);
         player.setSeekParameters(SeekParameters.EXACT);
         player.addListener(new Player.Listener() {
+            @Override public void onCues(CueGroup cueGroup) { subtitleView.setCues(cueGroup.cues); }
+            @Override public void onTracksChanged(Tracks tracks) { updateSubtitleState(); status(); }
             @Override public void onVideoSizeChanged(VideoSize size) {
                 if (size.height > 0) {
                     videoAspect = size.width * size.pixelWidthHeightRatio / size.height;
@@ -425,6 +509,8 @@ public final class MainActivity extends Activity {
                 }
             }
             @Override public void onPlaybackStateChanged(int state) {
+                readAheadCache.playbackReady(!seekPending && (state == Player.STATE_READY
+                    || state == Player.STATE_BUFFERING && !loading));
                 if (state == Player.STATE_READY) loading = false;
                 status();
             }
@@ -457,6 +543,330 @@ public final class MainActivity extends Activity {
         if (width / (float) height > videoAspect) width = Math.round(height * videoAspect);
         else height = Math.round(width / videoAspect);
         surface.setLayoutParams(new FrameLayout.LayoutParams(width, height, Gravity.CENTER));
+        subtitleView.setLayoutParams(new FrameLayout.LayoutParams(width, height, Gravity.CENTER));
+    }
+
+    private long nextClientId() { return ++clientRequestId; }
+
+    private long requestClient(String action, JSONObject fields) {
+        if (!connected || client == null) {
+            Toast.makeText(this, "Connect to a Windows computer first.", Toast.LENGTH_LONG).show();
+            return -1;
+        }
+        if (clientRequests.size() >= 64) {
+            Toast.makeText(this, "Too many computer requests are still pending. Wait a moment and retry.", Toast.LENGTH_LONG).show();
+            return -1;
+        }
+        try {
+            long id = nextClientId();
+            JSONObject message = new JSONObject().put("op", "client_request").put("id", id).put("action", action);
+            if (fields != null) {
+                java.util.Iterator<String> keys = fields.keys();
+                while (keys.hasNext()) { String key = keys.next(); message.put(key, fields.get(key)); }
+            }
+            long requestEpoch = -1, requestMediaGeneration = -1;
+            if (action.equals("track") || action.equals("subtitle") || action.equals("play")
+                || action.equals("pause") || action.equals("seek") || action.equals("resync")) {
+                long currentEpoch = clientState.optLong("epoch", playback.epoch());
+                long currentMediaGeneration = clientState.optLong("media_generation", -1);
+                requestEpoch = fields != null && fields.has("epoch") ? fields.optLong("epoch", -1) : currentEpoch;
+                requestMediaGeneration = fields != null && fields.has("media_generation")
+                    ? fields.optLong("media_generation", -1) : currentMediaGeneration;
+                if (requestEpoch < 0 || requestMediaGeneration < 0
+                    || (currentMediaGeneration >= 0 && (requestEpoch != currentEpoch || requestMediaGeneration != currentMediaGeneration))) {
+                    Toast.makeText(this, "The movie changed. Open playback options again.", Toast.LENGTH_LONG).show();
+                    return -1;
+                }
+                message.put("epoch", requestEpoch).put("media_generation", requestMediaGeneration);
+            }
+            ClientRequest request = new ClientRequest(action, uiGeneration, requestEpoch, requestMediaGeneration);
+            clientRequests.put(id, request); client.send(message);
+            main.postDelayed(() -> {
+                ClientRequest pending = clientRequests.remove(id);
+                if (pending != null && !destroyed && pending.viewGeneration == uiGeneration
+                    && (pending.mediaGeneration < 0 || pending.mediaGeneration == clientState.optLong("media_generation", -1)))
+                    Toast.makeText(this, "The computer did not finish that request.", Toast.LENGTH_LONG).show();
+            }, 30000);
+            return id;
+        } catch (JSONException e) {
+            Toast.makeText(this, "Could not send request.", Toast.LENGTH_LONG).show();
+            return -1;
+        }
+    }
+
+    private void showProviders() {
+        if (!connected) { Toast.makeText(this, "Connect to the Windows computer to browse its shared folders.", Toast.LENGTH_LONG).show(); return; }
+        uiGeneration++;
+        latestProvidersRequest = requestClient("providers", null);
+    }
+
+    private void showBrowseMenu() {
+        if (!connected) { Toast.makeText(this, "Connect to browse movies.", Toast.LENGTH_LONG).show(); return; }
+        JSONArray available = clientState.optJSONArray("providers");
+        if (available == null || available.length() == 0) { showProviders(); return; }
+        List<String> labels = new ArrayList<>(); List<String> ids = new ArrayList<>();
+        for (int i = 0; i < available.length(); i++) {
+            JSONObject p = available.optJSONObject(i);
+            if (p != null && p.optBoolean("available", false)) { labels.add(p.optString("label", "Library")); ids.add(p.optString("id", "windows")); }
+        }
+        if (ids.isEmpty()) { Toast.makeText(this, "No library providers are available.", Toast.LENGTH_LONG).show(); return; }
+        String[] rows = labels.toArray(new String[0]);
+        uiGeneration++;
+        final long dialogGeneration = uiGeneration;
+        if (libraryDialog != null && libraryDialog.isShowing()) libraryDialog.dismiss();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Browse movies")
+            .setItems(rows, (d, which) -> { libraryDialog = null; browserProvider = ids.get(which); browserEntry = ""; browserParents.clear(); browse(browserProvider, "", 0); })
+            .setNegativeButton("Close", null).create();
+        libraryDialog = dialog;
+        dialog.setOnCancelListener(d -> { if (libraryDialog == dialog) libraryDialog = null; if (uiGeneration == dialogGeneration) uiGeneration++; });
+        dialog.show();
+    }
+
+    private void browse(String provider, String entry, int cursor) {
+        uiGeneration++;
+        try { latestBrowseRequest = requestClient("browse", new JSONObject().put("provider", provider).put("entry", entry).put("cursor", cursor)); }
+        catch (JSONException ignored) {}
+    }
+
+    private void showBrowseResult(JSONObject result) {
+        browserProvider = result.optString("provider", browserProvider);
+        browserEntry = result.optString("entry", "");
+        JSONArray entries = result.optJSONArray("entries");
+        if (entries == null) entries = new JSONArray();
+        final JSONArray rows = entries;
+        ArrayList<String> labels = new ArrayList<>();
+        boolean canGoParent = !result.optString("parent", "").isEmpty() || !browserParents.isEmpty();
+        if (canGoParent) labels.add("↑  Parent folder");
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject e = rows.optJSONObject(i);
+            if (e == null) continue;
+            labels.add((e.optBoolean("directory") ? "▸  " : "▶  ") + e.optString("name", "Item"));
+        }
+        final boolean hasMore = !result.isNull("next_cursor") && result.optInt("next_cursor", -1) >= 0;
+        if (hasMore) labels.add("Load more…");
+        String[] choices = labels.toArray(new String[0]);
+        final long dialogGeneration = uiGeneration;
+        if (libraryDialog != null && libraryDialog.isShowing()) libraryDialog.dismiss();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(result.optString("label", "Library"))
+            .setItems(choices, (d, which) -> {
+                libraryDialog = null;
+                int offset = 0;
+                if (canGoParent) {
+                    if (which == 0) {
+                        String parent = result.optString("parent", "");
+                        if (!browserParents.isEmpty()) {
+                            String previous = browserParents.pop();
+                            if (parent.isEmpty()) parent = previous;
+                        }
+                        browse(browserProvider, parent, 0); return;
+                    }
+                    offset = 1;
+                }
+                if (hasMore && which == labels.size() - 1) { browse(browserProvider, browserEntry, result.optInt("next_cursor", 0)); return; }
+                JSONObject selected = rows.optJSONObject(which - offset);
+                if (selected == null) return;
+                String id = selected.optString("id", "");
+                if (selected.optBoolean("directory")) {
+                    browserParents.push(browserEntry); browse(browserProvider, id, 0);
+                }
+                else {
+                    uiGeneration++;
+                    try { requestClient("load_entry", new JSONObject().put("provider", browserProvider)
+                        .put("entry", id).put("autoplay", true)); }
+                    catch (JSONException ignored) {}
+                }
+            }).setNegativeButton("Close", null).create();
+        libraryDialog = dialog;
+        dialog.setOnCancelListener(d -> { if (libraryDialog == dialog) libraryDialog = null; if (uiGeneration == dialogGeneration) uiGeneration++; });
+        dialog.show();
+    }
+
+    private void chooseStorageTree() {
+        try {
+            if (storageShare == null) storageShare = new StorageShare(this);
+            startActivityForResult(storageShare.pickerIntent(), 4107);
+        } catch (Exception e) { Toast.makeText(this, "Folder picker is unavailable: " + e.getMessage(), Toast.LENGTH_LONG).show(); }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != 4107 || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        try {
+            int flags = data.getFlags() & (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION | android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            if ((flags & android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) == 0)
+                throw new SecurityException("The selected folder did not grant read access");
+            getContentResolver().takePersistableUriPermission(data.getData(), android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (storageShare == null) storageShare = new StorageShare(this);
+            storageShare.setTree(data.getData());
+            Toast.makeText(this, "TV folder saved. Connect to a computer to browse it.", Toast.LENGTH_LONG).show();
+            if (connected && foreground) registerStorageShare();
+        } catch (Exception e) { Toast.makeText(this, "Could not save the folder grant: " + e.getMessage(), Toast.LENGTH_LONG).show(); }
+    }
+
+    private void registerStorageShare() {
+        if (!foreground || !connected || client == null) return;
+        try {
+            if (storageShare == null) storageShare = new StorageShare(this);
+            if (!storageShare.hasTree()) return;
+            JSONObject registration = storageShare.start();
+            registration.put("id", nextClientId()).put("label", "TV storage");
+            client.send(registration);
+        } catch (Exception e) {
+            Toast.makeText(this, "TV storage could not be shared: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void createAudioBadge() {
+        audioBadge = new TextView(this); audioBadge.setTextColor(0xfff4f7fb); audioBadge.setTextSize(16);
+        audioBadge.setGravity(Gravity.CENTER); audioBadge.setPadding(dp(14), dp(8), dp(14), dp(8));
+        GradientDrawable bg = new GradientDrawable(); bg.setColor(0xe61b293d); bg.setCornerRadius(dp(10)); audioBadge.setBackground(bg);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.RIGHT);
+        lp.setMargins(0, dp(26), dp(28), 0); root.addView(audioBadge, lp); audioBadge.setVisibility(View.GONE);
+    }
+
+    private void showAudioBadge(String value, boolean force) {
+        String label = value == null ? "" : value.trim();
+        if (label.isEmpty() || (!force && label.equals(lastAudioBadge))) return;
+        lastAudioBadge = label; audioBadge.setText(label);
+        audioBadge.setVisibility(View.VISIBLE); main.removeCallbacks(hideAudioBadge); main.postDelayed(hideAudioBadge, 7500);
+    }
+
+    private void updateSubtitleState() {
+        if (player == null) return;
+        JSONArray tracks = new JSONArray(); String selected = "off"; int textGroup = 0;
+        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_TEXT) continue;
+            for (int i = 0; i < group.length; i++) {
+                Format f = group.getTrackFormat(i); String id = textGroup + ":" + i;
+                boolean isSelected = group.isTrackSelected(i); if (isSelected) selected = id;
+                String language = f.language == null || f.language.equals("und") ? "" : f.language;
+                String codec = f.sampleMimeType == null ? "" : f.sampleMimeType;
+                String label = f.label == null || f.label.isEmpty() ? (language.isEmpty() ? "Subtitle " + (tracks.length() + 1) : language) : f.label;
+                try { tracks.put(new JSONObject().put("id", id).put("label", label).put("language", language)
+                    .put("codec", codec).put("selected", isSelected).put("supported", group.isTrackSupported(i))
+                    .put("format_label", codec)); } catch (JSONException ignored) {}
+            }
+            textGroup++;
+        }
+        try { clientState.put("local_subtitle_tracks", tracks).put("local_selected_subtitle", selected); } catch (JSONException ignored) {}
+    }
+
+    private boolean applySubtitle(String id) {
+        if (id == null || id.equals("off")) {
+            player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+            subtitleView.setCues(Collections.emptyList()); status(); return true;
+        }
+        String[] parts = id.split(":", -1);
+        try {
+            int targetGroup = Integer.parseInt(parts[0]), targetTrack = Integer.parseInt(parts[1]), g = 0;
+            for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+                if (group.getType() != C.TRACK_TYPE_TEXT) continue;
+                if (g++ == targetGroup && targetTrack >= 0 && targetTrack < group.length && group.isTrackSupported(targetTrack)) {
+                    player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .setOverrideForType(new TrackSelectionOverride(group.getMediaTrackGroup(), targetTrack)).build());
+                    status(); return true;
+                }
+            }
+        } catch (Exception ignored) {}
+        Toast.makeText(this, "That subtitle track is no longer available.", Toast.LENGTH_LONG).show();
+        return false;
+    }
+
+    private JSONObject menuRequestFields(JSONObject values) throws JSONException {
+        JSONObject fields = values == null ? new JSONObject() : new JSONObject(values.toString());
+        fields.put("epoch", menuEpoch).put("media_generation", menuMediaGeneration);
+        return fields;
+    }
+
+    private void closePlaybackMenu(boolean invalidateRequests) {
+        if (playbackMenuScroll != null && playbackMenuScroll.getParent() == root) root.removeView(playbackMenuScroll);
+        playbackMenuScroll = null; playbackMenu = null; menuEpoch = -1; menuMediaGeneration = -1;
+        if (invalidateRequests) uiGeneration++;
+    }
+
+    private void showPlaybackMenu(String section) {
+        if (playbackMenuScroll == null) {
+            menuEpoch = clientState.optLong("epoch", playback.epoch());
+            menuMediaGeneration = clientState.optLong("media_generation", -1);
+        }
+        if (playbackMenuScroll != null) root.removeView(playbackMenuScroll);
+        playbackMenu = new LinearLayout(this); playbackMenu.setOrientation(LinearLayout.VERTICAL);
+        playbackMenu.setPadding(dp(22), dp(16), dp(22), dp(16)); playbackMenu.setBackgroundColor(0xee1b293d);
+        playbackMenu.setFocusable(false);
+        playbackMenuScroll = new ScrollView(this); playbackMenuScroll.setFillViewport(false); playbackMenuScroll.setClipToPadding(false);
+        playbackMenuScroll.addView(playbackMenu, new FrameLayout.LayoutParams(-1, -2));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(430), -2, Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        lp.height = Math.min(getResources().getDisplayMetrics().heightPixels - dp(48), dp(760));
+        lp.setMargins(0, 0, dp(26), 0); root.addView(playbackMenuScroll, lp);
+        TextView heading = new TextView(this); heading.setText(section.isEmpty() ? "Playback options" : section);
+        heading.setTextSize(22); heading.setTextColor(0xff45d7c8); playbackMenu.addView(heading);
+        if (section.isEmpty()) {
+            menuButton("Audio track", () -> showPlaybackMenu("Audio track"));
+            menuButton("Subtitles", () -> showPlaybackMenu("Subtitles"));
+            menuButton("Browse movies", () -> { closePlaybackMenu(true); showBrowseMenu(); });
+            menuButton("Resynchronize", () -> {
+                try { requestClient("resync", menuRequestFields(null)); }
+                catch (JSONException ignored) {}
+            });
+        } else if (section.equals("Audio track")) {
+            JSONArray tracks = clientState.optJSONArray("audio_tracks");
+            if (tracks == null || tracks.length() == 0) menuText("Audio tracks appear after a movie loads.");
+            else for (int i = 0; i < tracks.length(); i++) {
+                JSONObject track = tracks.optJSONObject(i); if (track == null) continue;
+                String aid = track.optString("id", "");
+                String label = track.optString("label", "Audio " + (i + 1));
+                String format = track.optString("format_label", "");
+                boolean supported = track.optBoolean("supported", false);
+                String row = (supported ? (track.optBoolean("selected") ? "✓  " : "   ") : "Unsupported  •  ")
+                    + label + (format.isEmpty() ? "" : "  •  " + format);
+                Button button = menuButton(row, () -> {
+                    try { requestClient("track", menuRequestFields(new JSONObject().put("aid", aid))); }
+                    catch (JSONException ignored) {}
+                    showPlaybackMenu("");
+                });
+                button.setEnabled(supported);
+            }
+        } else if (section.equals("Subtitles")) {
+            JSONArray tracks = clientState.optJSONArray("subtitle_tracks");
+            if (tracks == null || tracks.length() == 0) tracks = clientState.optJSONArray("local_subtitle_tracks");
+            JSONArray options = tracks;
+            boolean subtitlesOff = clientState.optString("selected_subtitle", "off").equals("off");
+            menuButton((subtitlesOff ? "✓  " : "   ") + "Off", () -> {
+                try { requestClient("subtitle", menuRequestFields(new JSONObject().put("sid", "off"))); }
+                catch (JSONException ignored) {}
+                showPlaybackMenu("");
+            });
+            if (options == null || options.length() == 0) menuText("No supported text subtitle tracks were found.");
+            else for (int i = 0; i < options.length(); i++) {
+                JSONObject track = options.optJSONObject(i); if (track == null || !track.optBoolean("supported", false)) continue;
+                String sid = track.optString("id", ""); String label = track.optString("label", "Subtitle " + (i + 1));
+                if (!track.optString("language", "").isEmpty()) label += "  •  " + track.optString("language");
+                menuButton((track.optBoolean("selected") ? "✓  " : "   ") + label, () -> {
+                    try { requestClient("subtitle", menuRequestFields(new JSONObject().put("sid", sid))); }
+                    catch (JSONException ignored) {}
+                    showPlaybackMenu("");
+                });
+            }
+        }
+        menuButton("Back", () -> showPlaybackMenu(""));
+        for (int i = 0; i < playbackMenu.getChildCount(); i++) {
+            View child = playbackMenu.getChildAt(i);
+            if (child.isFocusable() && child.getVisibility() == View.VISIBLE) { child.requestFocus(); break; }
+        }
+    }
+
+    private void menuText(String value) {
+        TextView text = new TextView(this); text.setText(value); text.setTextColor(0xffb8c6d9); text.setTextSize(17);
+        text.setPadding(dp(8), dp(10), dp(8), dp(10)); playbackMenu.addView(text);
+    }
+
+    private Button menuButton(String label, Runnable click) {
+        Button button = new Button(this); button.setText(label); button.setTextSize(16);
+        styleButton(button); button.setOnClickListener(v -> click.run());
+        playbackMenu.addView(button, new LinearLayout.LayoutParams(-1, dp(54)));
+        return button;
     }
 
     private void installFrameListener() {
@@ -484,7 +894,9 @@ public final class MainActivity extends Activity {
         if (connecting) return;
         if (timingClient != null) timingClient.close();
         cancelStart(); player.pause(); ++seekSerial;
-        resetRemote(); remoteSupported = false; coordinatorEpoch = -1;
+        resetRemote(); remoteSupported = false; coordinatorEpoch = -1; clientRequests.clear();
+        closePlaybackMenu(true); if (libraryDialog != null) { libraryDialog.dismiss(); libraryDialog = null; }
+        if (storageShare != null) storageShare.close();
         if (client != null) client.close();
         String host = hostInput.getText().toString().trim();
         String code = tokenInput.getText().toString().trim();
@@ -505,6 +917,8 @@ public final class MainActivity extends Activity {
                 main.post(() -> {
                     if (destroyed || client != session[0]) return;
                     connected = false; connecting = false; cancelStart(); resetRemote(); player.pause();
+                    clientRequests.clear(); if (storageShare != null) storageShare.close();
+                    closePlaybackMenu(true); if (libraryDialog != null) { libraryDialog.dismiss(); libraryDialog = null; }
                     if (timingClient != null) timingClient.close();
                     if (authRequired) { authRequired = false; return; }
                     info.setText(reason + "\nReconnect, then reload the media on Windows.");
@@ -551,7 +965,9 @@ public final class MainActivity extends Activity {
                 timingReconnecting = !syncMode.equals("baseline");
                 if (!syncMode.equals("baseline")) {
                     final TimingClient timing = new TimingClient(); timingClient = timing;
-                    timing.connect(hostInput.getText().toString().trim(), Integer.parseInt(portInput.getText().toString()),
+                    boolean useDatagrams = "udp".equals(msg.optString("timing_transport"));
+                    timing.connect(hostInput.getText().toString().trim(), useDatagrams
+                            ? msg.getInt("timing_udp_port") : Integer.parseInt(portInput.getText().toString()),
                         msg.getString("timing_token"), audioTimeline, () -> main.post(() -> {
                             if (timingClient == timing && connected) {
                                 timingReconnecting = false;
@@ -564,7 +980,7 @@ public final class MainActivity extends Activity {
                                 if (error.isEmpty() || error.equals(TIMING_ERROR)) error = TIMING_ERROR;
                                 status();
                             }
-                        }));
+                        }), useDatagrams);
                 }
                 loading = false; seekPending = false; error = ""; decoderName = "";
                 coordinatorEpoch = -1; coordinatorState = "idle"; movieTitle = ""; movieDurationMs = 0;
@@ -576,7 +992,58 @@ public final class MainActivity extends Activity {
                 }
                 stopDiscovery();
                 remoteSupported = msg.optBoolean("remote_controls", false);
-                connected = true; info.setText("Connected. Load a file from the Windows controller."); status(); return;
+                connected = true; clientState = new JSONObject(); clientRequests.clear();
+                lastMediaGeneration = -1; displayedBadgeGeneration = -1; lastAudioBadge = "";
+                info.setText("Connected. Browse a shared folder or load from the Windows controller.");
+                // Refresh the catalog silently. Only an explicit Browse action
+                // may open a dialog over a movie loaded from another client.
+                registerStorageShare(); requestClient("providers", null); status(); return;
+            }
+            if (op.equals("client_state")) {
+                JSONObject state = msg.optJSONObject("state");
+                if (state != null) {
+                    long generation = state.optLong("media_generation", -1);
+                    long stateEpoch = state.optLong("epoch", -1);
+                    boolean newMedia = lastMediaGeneration >= 0 && generation != lastMediaGeneration;
+                    boolean staleMediaMenu = lastMediaGeneration >= 0
+                        && (newMedia || stateEpoch != clientState.optLong("epoch", -1));
+                    if (staleMediaMenu) closePlaybackMenu(true);
+                    if (newMedia) { main.removeCallbacks(hideAudioBadge); audioBadge.setVisibility(View.GONE); }
+                    lastMediaGeneration = generation;
+                    clientState = state;
+                    Object badge = state.opt("audio_badge");
+                    String label = badge instanceof JSONObject ? ((JSONObject)badge).optString("label", "") : String.valueOf(badge == null || badge == JSONObject.NULL ? "" : badge);
+                    if (state.optString("state", "").equals("playing") && !label.trim().isEmpty()
+                        && (generation != displayedBadgeGeneration || !label.trim().equals(lastAudioBadge))) {
+                        showAudioBadge(label, generation != displayedBadgeGeneration);
+                        displayedBadgeGeneration = generation;
+                    }
+                    updateTransport();
+                }
+                return;
+            }
+            if (op.equals("client_response")) {
+                long reply = msg.optLong("reply", -1); ClientRequest request = clientRequests.remove(reply);
+                if (request == null) return;
+                String action = request.action;
+                boolean requestCurrent = request.viewGeneration == uiGeneration
+                    && (request.mediaGeneration < 0 || (request.mediaGeneration == clientState.optLong("media_generation", -1)
+                        && request.epoch == clientState.optLong("epoch", -1)));
+                if (!msg.optBoolean("ok", false)) {
+                    if (!requestCurrent) return;
+                    String reason = msg.optString("error", "Computer request failed");
+                    Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                JSONObject result = msg.optJSONObject("result");
+                if (result == null) result = new JSONObject();
+                if ("providers".equals(action)) {
+                    if (!requestCurrent) return;
+                    clientState = new JSONObject(clientState.toString());
+                    clientState.put("providers", result.optJSONArray("providers") == null ? result.optJSONArray("entries") : result.optJSONArray("providers"));
+                    if (reply == latestProvidersRequest) showBrowseMenu();
+                } else if ("browse".equals(action) && requestCurrent && reply == latestBrowseRequest) showBrowseResult(result);
+                return;
             }
             if (op.equals("coordinator")) { coordinator(msg); return; }
             if (op.equals("remote_result")) {
@@ -589,17 +1056,27 @@ public final class MainActivity extends Activity {
                 }
                 return;
             }
+            if (op.equals("subtitle")) {
+                long incoming = msg.optLong("epoch", playback.epoch());
+                boolean ok = incoming == playback.epoch() && applySubtitle(msg.optString("sid", "off"));
+                if (id >= 0) client.send(new JSONObject().put("reply", id).put("epoch", playback.epoch())
+                    .put("error", ok ? "" : "Playback epoch changed or subtitle track unavailable"));
+                return;
+            }
             if (msg.has("error") && id < 0) throw new IllegalStateException(msg.getString("error"));
             long incomingEpoch = msg.optLong("epoch", playback.epoch());
             boolean epochChanged = playback.accept(incomingEpoch);
             if (!op.equals("speed")) { cancelStart(); player.pause(); player.setPlaybackSpeed(1f); }
             if (epochChanged) {
-                audioTimeline.reset(incomingEpoch, Math.round(player.getCurrentPosition() * 1000), System.nanoTime());
+                audioTimeline.resetMillis(incomingEpoch, player.getCurrentPosition(), System.nanoTime());
                 installFrameListener();
             }
             switch (op) {
                 case "pause": break;
                 case "load": {
+                    readAheadCache.playbackReady(false);
+                    closePlaybackMenu(true);
+                    if (libraryDialog != null) { libraryDialog.dismiss(); libraryDialog = null; }
                     resetRemote();
                     error = ""; loading = true; seekPending = true;
                     droppedVideoFrames = 0; transferMbps = -1; transferSampleNs = 0;
@@ -616,6 +1093,7 @@ public final class MainActivity extends Activity {
                     break;
                 }
                 case "seek":
+                    readAheadCache.playbackReady(false);
                     seekPending = true; installFrameListener();
                     player.seekTo(Math.max(0, msg.getLong("position_ms"))); seekCompletion(); break;
                 case "arm": {
@@ -671,9 +1149,11 @@ public final class MainActivity extends Activity {
             @Override public void run() {
                 if (destroyed || serial != seekSerial || !playback.matches(generation)) return;
                 if (player.getPlaybackState() == Player.STATE_READY && !player.isLoading()) {
+                    readAheadCache.playbackReady(true);
                     seekPending = false; status();
                 } else if (player.getPlaybackState() == Player.STATE_READY) {
                     // isLoading also covers harmless background prefetch.
+                    readAheadCache.playbackReady(true);
                     seekPending = false; status();
                 } else if (player.getPlayerError() == null) main.postDelayed(this, 50);
             }
@@ -697,6 +1177,7 @@ public final class MainActivity extends Activity {
     private void status() {
         if (!connected || client == null || destroyed) return;
         try {
+            updateSubtitleState();
             JSONObject s = new JSONObject().put("op", "status").put("epoch", playback.epoch())
                 .put("state", stateName()).put("position_ms", player.getCurrentPosition())
                 .put("buffered_ms", player.getBufferedPosition()).put("playing", player.isPlaying())
@@ -704,19 +1185,34 @@ public final class MainActivity extends Activity {
                 .put("error", error).put("frame", frame).put("decoder", decoderName)
                 .put("heap_limit_mb", Runtime.getRuntime().maxMemory() / (1024 * 1024))
                 .put("buffer_budget_mb", bufferBudgetBytes / (1024 * 1024))
+                .put("allocated_buffer_bytes", bufferAllocator.getTotalBytesAllocated())
+                .put("total_buffered_ms", player.getTotalBufferedDuration())
+                .put("native_loading", player.isLoading())
+                .put("java_heap_used_mb", (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / (1024 * 1024))
                 .put("dropped_video_frames", droppedVideoFrames)
                 .put("transfer_mbps", transferMbps >= 0 ? transferMbps : JSONObject.NULL)
                 .put("transfer_age_ms", transferSampleNs > 0 ? (System.nanoTime() - transferSampleNs) / 1000000.0 : JSONObject.NULL)
                 .put("display_hdr_types", new JSONArray(hdrTypes))
                 .put("decoders", capabilities).put("sample_ns", System.nanoTime())
                 .put("sync_mode", syncMode).put("display_refresh_hz", getWindowManager().getDefaultDisplay().getRefreshRate());
+            s.put("subtitle_tracks", clientState.optJSONArray("local_subtitle_tracks") == null ? new JSONArray() : clientState.optJSONArray("local_subtitle_tracks"));
+            s.put("selected_subtitle", clientState.optString("local_selected_subtitle", "off"));
             s.put("timing_reconnecting", timingReconnecting);
             s.put("timing_error_only", timingReconnecting && error.equals(TIMING_ERROR));
+            ReadAheadCache.Stats readAhead = readAheadCache.stats();
+            s.put("read_ahead", new JSONObject().put("state", readAhead.state)
+                .put("ahead_bytes", readAhead.aheadBytes).put("cache_bytes", readAhead.cacheBytes)
+                .put("downloaded_bytes", readAhead.downloadedBytes).put("failures", readAhead.failures)
+                .put("chunks", readAhead.chunks).put("cache_budget_bytes", readAhead.cacheBudgetBytes)
+                .put("lookahead_bytes", readAhead.lookaheadBytes)
+                .put("foreground_wait_ms", readAhead.foregroundWaitMs)
+                .put("max_foreground_wait_ms", readAhead.maxForegroundWaitMs));
             long now = System.nanoTime();
             if (syncMode.equals("audio-clock")) s.put("remote_clock", new JSONObject()
                 .put("state", audioTimeline.state(now)).put("phase_error_ms", audioTimeline.phaseMs())
                 .put("max_dispatch_delay_ms", audioTimeline.maxDispatchDelayMs())
                 .put("uncertainty_ms", audioTimeline.uncertaintyMs(now))
+                .put("anchor_age_ms", audioTimeline.anchorAgeMs(now))
                 .put("reads_recent", audioClockRenderer.recentlyRead(now))
                 .put("renderer_error_ms", audioClockRenderer.rendererErrorMs()));
             FrameObservations.Sample rendered = observations.latest();
@@ -755,6 +1251,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
+        if (playbackMenuScroll != null && playbackMenuScroll.getParent() == root) { closePlaybackMenu(true); return; }
         if (remote.hasPreview()) { main.removeCallbacks(commitSeek); remote.clearPreview(); showTransport(); return; }
         setup.setVisibility(setup.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
         updateTransport();
@@ -763,13 +1260,19 @@ public final class MainActivity extends Activity {
     @Override protected void onStop() {
         foreground = false; stopDiscovery(); connecting = false;
         if (codeDialog != null) codeDialog.dismiss();
-        super.onStop(); cancelStart(); resetRemote(); player.pause();
+        closePlaybackMenu(true); if (libraryDialog != null) { libraryDialog.dismiss(); libraryDialog = null; }
+        if (readAheadCache != null) readAheadCache.suspend();
+        super.onStop(); cancelStart(); resetRemote(); player.pause(); audioTimeline.stop(System.nanoTime());
         if (client != null) client.close(); connected = false;
+        if (storageShare != null) storageShare.close();
         if (timingClient != null) timingClient.close();
         setup.setVisibility(View.VISIBLE); info.setText("Playback stopped. Reconnect and reload to continue.");
     }
 
-    @Override protected void onStart() { super.onStart(); autoAttempted.clear(); foreground = true; }
+    @Override protected void onStart() {
+        super.onStart(); autoAttempted.clear(); foreground = true;
+        if (readAheadCache != null) readAheadCache.resume();
+    }
 
     @Override protected void onResume() {
         super.onResume();
@@ -782,6 +1285,8 @@ public final class MainActivity extends Activity {
         stopDiscovery();
         if (client != null) client.close();
         if (timingClient != null) timingClient.close();
-        player.release(); super.onDestroy();
+        player.release();
+        if (readAheadCache != null) readAheadCache.close();
+        super.onDestroy();
     }
 }

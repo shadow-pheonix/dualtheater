@@ -4,6 +4,66 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class RemoteTimelineTest {
+    @Test public void nativeRendererRebufferCannotFreezeOrRepositionTheExternalMaster() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        t.arm(1, 0, start, start, 0, 0); t.start(start);
+        assertTrue(t.accept(1, 1, start, 0, 1, 1, start));
+        assertEquals(100_000, t.read(start + 100_000_000L), 1);
+        // Video renderer stopped/re-enabled while independent HDMI audio plays.
+        t.rendererResetPosition(50_000, start + 250_000_000L);
+        t.start(start + 350_000_000L);
+        assertEquals(350_000, t.read(start + 350_000_000L), 1);
+        assertEquals("holdover", t.state(start + 350_000_000L));
+        t.reset(2, 900_000, start + 400_000_000L);
+        assertEquals(900_000, t.read(start + 700_000_000L));
+        assertEquals("paused", t.state(start + 700_000_000L));
+    }
+    @Test public void briefDeliveryGapUsesBoundedConfidenceWithoutAJumpOrFresheningOldPackets() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        t.arm(1, 0, start, start, 0, 0); t.start(start);
+        assertTrue(t.accept(1, 1, start, 0, 1, 1, start));
+        for (int i = 1; i <= 100; i++) t.read(start + i * 10_000_000L);
+        assertEquals("holdover", t.state(start + 1_000_000_000L));
+        assertFalse(t.accept(1, 2, start + 100_000_000L, 100_000, 1, 1, start + 1_000_000_000L));
+        assertEquals(1000, t.anchorAgeMs(start + 1_000_000_000L), .001);
+        assertTrue(t.accept(1, 3, start + 1_300_000_000L, 1_300_000, 1, 1, start + 1_300_000_000L));
+        assertEquals(1_300_000, t.read(start + 1_300_000_000L), 1);
+        assertEquals("locked", t.state(start + 1_300_000_000L));
+        long frozen = t.read(start + 3_400_000_000L);
+        assertEquals("audio_anchor_expired", t.state(start + 3_400_000_000L));
+        assertEquals(frozen, t.read(start + 4_000_000_000L));
+    }
+
+    @Test public void holdoverExpiresEarlierWhenConfidenceIsExhausted() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        t.arm(1, 0, start, start, 0, 0); t.start(start);
+        assertTrue(t.accept(1, 1, start, 0, 1, 21.5, start));
+        assertEquals(100_000, t.read(start + 100_000_000L), 1);
+        assertEquals(100_000, t.read(start + 200_000_000L), 1);
+        assertEquals("audio_anchor_expired", t.state(start + 200_000_000L));
+    }
+
+    @Test public void validatorMatchesTheHostRateAndConfidenceContract() {
+        long start = 1_000_000_000L;
+        for (double source : new double[]{.999, 1.001}) {
+            for (double clock : new double[]{.999, 1.001}) {
+                RemoteTimeline t = new RemoteTimeline(); t.arm(1, 0, start, start, 0, 0);
+                assertTrue(t.accept(1, 1, start, 0, source / clock, 22, start));
+            }
+        }
+        RemoteTimeline t = new RemoteTimeline(); t.arm(1, 0, start, start, 0, 0);
+        assertFalse(t.accept(1, 1, start, 0, 1.001 / .999 + .000001, 1, start));
+        assertFalse(t.accept(1, 1, start, 0, 1, 22.001, start));
+    }
+    @Test public void epochResetPreservesPositionsPastThirtyFiveMinutes() {
+        RemoteTimeline t = new RemoteTimeline(); long now = 1_000_000_000L;
+        for (long millis : new long[]{2_147_483L, 2_147_484L, 3_300_000L, 14_400_000L}) {
+            t.resetMillis(1, millis, now);
+            assertEquals(millis * 1000L, t.read(now + 100_000_000L));
+            assertEquals("paused", t.state(now));
+        }
+    }
+
     @Test public void delayedTimingThreadCannotCreateFalsePhaseJump() {
         RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
         t.arm(1, 0, start, start, 0, 0); t.start(start);

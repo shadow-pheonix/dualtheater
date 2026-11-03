@@ -13,6 +13,82 @@ import test_core
 
 
 class DiagnosticReportTests(unittest.TestCase):
+    def test_native_buffer_observations_are_allowlisted_and_stale_values_are_not_current(self):
+        values = dict(epoch=4, native_loading=True, allocated_buffer_bytes=48 * 1024 * 1024,
+                      total_buffered_ms=514, java_heap_used_mb=72)
+        report = self.report(status=values)['telemetry']
+        self.assertTrue(report['native_loading'])
+        self.assertEqual(report['allocated_buffer_bytes'], 48 * 1024 * 1024)
+        self.assertEqual(report['total_buffered_ms'], 514)
+        stale = self.report(status=values, status_age_ms=3000)['telemetry']
+        self.assertIsNone(stale['allocated_buffer_bytes'])
+        self.assertIsNone(stale['native_loading'])
+        values.update(native_loading='PRIVATE_NATIVE_SENTINEL', allocated_buffer_bytes=float('nan'))
+        report = self.report(status=values)['telemetry']
+        self.assertIsNone(report['native_loading'])
+        self.assertIsNone(report['allocated_buffer_bytes'])
+        self.assertNotIn('PRIVATE_NATIVE_SENTINEL', json.dumps(report))
+
+    def test_fault_observations_survive_pause_reset_without_copying_raw_status(self):
+        from types import SimpleNamespace
+        from host.server import ns
+        from host.timing import ClockEstimate
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = HostRuntime(runtime_args('unused', 'wasapi/test', directory, ephemeral=True))
+            app = runtime.app
+            now = ns()
+            app.state = 'playing'
+            app.peer = SimpleNamespace(closed=False, status_seen=now,
+                clock=SimpleNamespace(best=lambda _: ClockEstimate(0, 1_000_000, now)),
+                status={'epoch': app.epoch, 'private': 'PRIVATE_FAULT_SENTINEL',
+                        'remote_clock': {'state': 'audio_phase_jump', 'phase_error_ms': 172}})
+            def reset(reason):
+                app.state = reason
+                app.peer.status = {'epoch': app.epoch, 'remote_clock': {'state': 'paused'}}
+            try:
+                with patch.object(app, 'pause_both', side_effect=reset):
+                    app.fail('PRIVATE_FAULT_SENTINEL')
+                report = app.diagnostic_report()
+                self.assertEqual(report['sync']['remote_clock_state'], 'paused')
+                self.assertEqual(report['last_failure']['sync']['remote_clock_state'], 'audio_phase_jump')
+                self.assertEqual(report['last_failure']['sync']['remote_clock_phase_ms'], 172)
+                self.assertNotIn('PRIVATE_FAULT_SENTINEL', json.dumps(report))
+                self.assertNotIn('last_failure', report['last_failure'])
+            finally:
+                app.peer = None
+                runtime.close()
+
+    def test_source_sampler_diagnostics_are_allowlisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = HostRuntime(runtime_args('unused', 'wasapi/test', directory, ephemeral=True))
+            try:
+                runtime.app.source_timing = {'state': 'fit_uncertain', 'input_uncertainty_ms': .3,
+                    'fit_uncertainty_ms': 11.8, 'consecutive_rejections': 4,
+                    'private_path': 'PRIVATE_SOURCE_SENTINEL'}
+                result = runtime.app.diagnostic_report()['sync']['source_sampler']
+                self.assertEqual(result['state'], 'fit_uncertain')
+                self.assertEqual(result['fit_uncertainty_ms'], 11.8)
+                self.assertNotIn('PRIVATE_SOURCE_SENTINEL', json.dumps(result))
+                runtime.app.source_timing.update(state='PRIVATE_SOURCE_SENTINEL',
+                    input_uncertainty_ms=float('nan'), fit_uncertainty_ms='11.8')
+                result = runtime.app.diagnostic_report()['sync']['source_sampler']
+                self.assertEqual(result['state'], 'unknown')
+                self.assertIsNone(result['input_uncertainty_ms'])
+                self.assertIsNone(result['fit_uncertainty_ms'])
+                runtime.app.anchor_delivery = {'state': 'stale', 'last_send_duration_ms': 850,
+                    'private_path': 'PRIVATE_DELIVERY_SENTINEL'}
+                result = runtime.app.diagnostic_report()['sync']['anchor_delivery']
+                self.assertEqual(result['state'], 'stale')
+                self.assertEqual(result['last_send_duration_ms'], 850)
+                self.assertNotIn('PRIVATE_DELIVERY_SENTINEL', json.dumps(result))
+                runtime.app.anchor_delivery.update(state='PRIVATE_DELIVERY_SENTINEL',
+                    last_send_duration_ms=float('nan'))
+                result = runtime.app.diagnostic_report()['sync']['anchor_delivery']
+                self.assertEqual(result['state'], 'unknown')
+                self.assertIsNone(result['last_send_duration_ms'])
+            finally:
+                runtime.close()
+
     def test_extended_timing_export_rejects_stale_or_malformed_feedback(self):
         from types import SimpleNamespace
         from host.server import ns
@@ -27,10 +103,23 @@ class DiagnosticReportTests(unittest.TestCase):
                         'rendered_frame': {'epoch': app.epoch, 'release_ns': now + offset - 10_000_000,
                                            'rendered_ns': now + offset}})
             self.assertTrue(app.diagnostic_report()['sync']['rendered_callback_present'])
+            app.peer.status['read_ahead'] = {'state': 'running', 'ahead_bytes': 128000,
+                'cache_bytes': 256000, 'private_uri': 'PRIVATE_CACHE_SENTINEL',
+                'downloaded_bytes': float('nan'), 'failures': '2',
+                'foreground_wait_ms': 125.5, 'max_foreground_wait_ms': 'PRIVATE_CACHE_SENTINEL'}
+            cache_report = app.diagnostic_report()['telemetry']['read_ahead']
+            self.assertEqual(cache_report['state'], 'running')
+            self.assertEqual(cache_report['ahead_bytes'], 128000)
+            self.assertIsNone(cache_report['downloaded_bytes'])
+            self.assertIsNone(cache_report['failures'])
+            self.assertEqual(cache_report['foreground_wait_ms'], 125.5)
+            self.assertIsNone(cache_report['max_foreground_wait_ms'])
+            self.assertNotIn('PRIVATE_CACHE_SENTINEL', json.dumps(cache_report))
             app.peer.status_seen -= 3_000_000_000
             report = app.diagnostic_report()['sync']
             self.assertFalse(report['rendered_callback_present'])
             self.assertEqual(report['remote_clock_state'], 'unknown')
+            self.assertEqual(app.diagnostic_report()['telemetry']['read_ahead']['state'], 'unknown')
             app.peer.status_seen = ns()
             app.peer.status.update(remote_clock='malformed', rendered_frame=['malformed'])
             json.dumps(app.diagnostic_report(), allow_nan=False)

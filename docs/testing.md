@@ -1,6 +1,8 @@
 # Testing status
 
-Stable **1.0.0** promotes the calibrated audio-clock build after the user reported that sync looks perfect on the tested setup. That observation is distinct from instrumented absolute accuracy and broad Android TV/Google TV compatibility. Long-session and additional hardware testing continues.
+Version **2.0.0** is promoted from the finalized beta.4 candidate. That candidate passed **151 host tests**, **39 TV JVM tests**, assembly/lint and final portable core verification. Its UDP movie run completed **900 seconds uninterrupted** with one playback epoch, zero reported errors/recoveries/dropped video frames, and user-reported continuous audio/in-sync dialogue. This is one-setup acceptance; whole-movie, broad hardware and instrumented latency testing remain pending. Release metadata/build/CI checks are recorded in [context](context.md).
+
+The sections below preserve earlier release verification and its limits; older counts are historical.
 
 ## Software verification
 

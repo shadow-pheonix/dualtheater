@@ -14,12 +14,21 @@ import test_core
 
 
 class TimedMpv(test_core.FakeMpv):
+    cache_paused = False
+    def get(self, name, default=None):
+        if name == 'paused-for-cache': return self.cache_paused
+        return super().get(name, default)
+
+    def seek(self, seconds):
+        self.cache_paused = False
+        return super().seek(seconds)
+
     def timed_audio_sample(self):
         return self.audio_sample() | {'source': 'mpv_source_clock'}
 
 
 class TimingTV:
-    def __init__(self, port, token, progress=True):
+    def __init__(self, port, token, progress=True, datagrams=False):
         self.port, self.progress = port, progress
         self.sock = socket.create_connection(('127.0.0.1', port), timeout=5)
         self.reader = self.sock.makefile('rb')
@@ -32,7 +41,9 @@ class TimingTV:
         self.started = ns(); self.playing = False; self.state = 'idle'; self.armed = None
         self.anchor = None; self.frame_sequence = 0; self.mode = ''; self.speed = 1
         self.reported_error = ''; self.timing_error_only = False
-        self.send({'op': 'hello', 'version': 1, 'token': token, 'timing_protocol': 2})
+        self.status_enabled = True; self.freeze_frames = False
+        self.send({'op': 'hello', 'version': 1, 'token': token, 'timing_protocol': 2,
+                   'timing_datagrams': datagrams})
         threading.Thread(target=self.read, daemon=True).start()
         threading.Thread(target=self.telemetry, daemon=True).start()
 
@@ -97,7 +108,10 @@ class TimingTV:
                 now = ns()
                 if self.armed and now >= self.armed and self.progress:
                     self.started = self.armed; self.armed = None; self.playing = True
-                self.frame_sequence += 1
+                if not self.freeze_frames: self.frame_sequence += 1
+                if not self.status_enabled:
+                    time.sleep(.025)
+                    continue
                 self.send({'op': 'status', 'epoch': self.epoch, 'state': self.state,
                     'position_ms': self.current(), 'sample_ns': now + self.offset,
                     'error': self.reported_error, 'timing_error_only': self.timing_error_only,
@@ -121,6 +135,35 @@ class TimingTV:
         self.sock.close()
 
 
+class DatagramTV(TimingTV):
+    def __init__(self, port, token):
+        self.reply_enabled = True
+        self.last_pong = None
+        super().__init__(port, token, datagrams=True)
+
+    def timing_read(self, token):
+        try:
+            self.timing = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.timing.connect(('127.0.0.1', self.port))
+            self.timing.settimeout(.2)
+            ready = False
+            while not self.closed:
+                if not ready:
+                    self.timing.send(json.dumps({'op': 'hello', 'version': 3, 'token': token}).encode())
+                try: m = json.loads(self.timing.recv(2049))
+                except socket.timeout: continue
+                if m.get('token') != token: continue
+                if m['op'] == 'timing_ready': ready = True
+                elif m['op'] == 'ping' and self.reply_enabled:
+                    now = ns() + self.offset
+                    self.last_pong = {'op': 'pong', 'token': token, 't0': m['t0'], 't1': now, 't2': now}
+                    self.timing.send(json.dumps(self.last_pong).encode())
+                elif m['op'] == 'anchor' and m['epoch'] == self.epoch:
+                    if not self.anchor or m['sequence'] > self.anchor['sequence']:
+                        self.anchor = m
+        except (OSError, ValueError): pass
+
+
 class RobustProtocolTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -142,6 +185,246 @@ class RobustProtocolTests(unittest.TestCase):
     def connect(self, progress=True):
         self.tv = TimingTV(self.runtime.args.control_port, self.app.pair_token, progress)
         self.wait(lambda: self.app.peer and self.app.peer.clock.best(ns()) is not None)
+
+    def connect_datagrams(self):
+        self.tv = DatagramTV(self.runtime.args.control_port, self.app.pair_token)
+        self.wait(lambda: self.app.peer and self.app.peer.clock.best(ns()) is not None)
+        self.assertEqual(self.app.peer.timing.transport, 'udp')
+        self.assertEqual(self.app.diagnostic_report()['sync']['timing_transport'], 'udp')
+
+    def test_datagram_start_pause_seek_and_transient_packet_loss(self):
+        self.connect_datagrams()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        epoch = self.app.epoch
+        original = self.app.peer.timing.send
+        def selective_loss(message):
+            if message.get('op') != 'anchor': return original(message)
+            return False
+        with patch.object(self.app.peer.timing, 'send', side_effect=selective_loss):
+            time.sleep(.05)
+            sequence = self.app.delivered_anchor['sequence']
+            time.sleep(.35)
+            self.assertEqual(self.app.delivered_anchor['sequence'], sequence)
+            self.assertGreater(self.app.latest_anchor['sequence'], sequence)
+        self.wait(lambda: self.tv.anchor and self.tv.anchor['sequence'] == self.app.delivered_anchor['sequence'])
+        self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.assertEqual(self.app.epoch, epoch)
+        self.app.action({'action': 'pause'})
+        self.app.action({'action': 'seek', 'seconds': 90})
+        self.assertEqual(self.app.state, 'paused')
+        self.app.action({'action': 'play'})
+        self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.assertEqual(self.tv.speed_commands, 0)
+        self.assertFalse(any(c[:2] == ('set_property', 'speed') for c in self.app.mpv.commands))
+
+    def test_datagram_authentication_endpoint_and_replay_are_bounded(self):
+        self.connect_datagrams()
+        peer, service = self.app.peer, self.runtime.datagram_timing
+        link, clock = peer.timing, peer.clock
+        self.tv.reply_enabled = False
+        time.sleep(.05)
+        count = len(clock.samples)
+        # A consumed ping cannot be replayed; unknown nonces, wrong session
+        # tokens/endpoints and malformed/oversized packets cannot move clocks.
+        service.receive(json.dumps(self.tv.last_pong).encode(), link.address, ns())
+        for packet, address in (({'op':'hello','version':3,'token':'wrong'},link.address),
+                ({'op':'hello','version':3,'token':peer.timing_token},('127.0.0.1',1)),
+                ({'op':'pong','token':peer.timing_token,'t0':1,'t1':2,'t2':3},link.address)):
+            service.receive(json.dumps(packet).encode(), address, ns())
+        for payload in (b'[]', b'broken', b'x'*2049, b'['*1000+b']'*1000):
+            service.receive(payload, link.address, ns())
+        self.assertIs(peer.timing, link)
+        self.assertIs(peer.clock, clock)
+        self.assertEqual(len(clock.samples), count)
+        for _ in range(30): link.send({'op':'ping'})
+        self.assertLessEqual(len(link.pending), 16)
+
+    def test_silent_datagram_peer_stops_playback_without_losing_control(self):
+        self.connect_datagrams()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        self.tv.reply_enabled = False
+        self.wait(lambda: self.app.state == 'error', seconds=4)
+        self.assertTrue(self.app.mpv.paused)
+        self.assertFalse(self.app.peer.closed)
+
+    def test_brief_native_refill_does_not_trigger_a_coordinated_seek(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        epoch = self.app.epoch
+        self.tv.state = 'buffering'
+        self.wait(lambda: self.app.peer.status.get('state') == 'buffering')
+        time.sleep(.05)
+        self.tv.state = 'ready'
+        self.wait(lambda: self.app.peer.status.get('state') == 'ready')
+        time.sleep(.25)
+        self.assertEqual(self.app.epoch, epoch)
+        self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.assertIsNone(self.app.last_recovery)
+
+    def test_persistent_native_refill_still_recovers_and_records_the_correct_source(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        epoch = self.app.epoch
+        self.tv.state = 'buffering'
+        self.wait(lambda: self.app.last_recovery is not None and self.app.state == 'playing' and self.app.epoch > epoch)
+        self.assertEqual(self.app.last_recovery['source'], 'video')
+        self.assertEqual(self.app.diagnostics.recoveries['buffering'], 1)
+
+    def test_audio_cache_pause_does_not_get_the_video_only_refill_grace(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        epoch = self.app.epoch
+        self.app.mpv.cache_paused = True
+        self.wait(lambda: self.app.last_recovery is not None and self.app.state == 'playing' and self.app.epoch > epoch)
+        self.assertEqual(self.app.last_recovery['source'], 'audio')
+        self.assertFalse(self.app.mpv.cache_paused)
+
+    def test_delayed_status_does_not_masquerade_as_a_frozen_video_frame(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        self.wait(lambda: self.app.drift_ms is not None)
+        before = self.app.peer.status_seen
+        self.tv.status_enabled = False
+        time.sleep(1.3)  # Timing/audio stay fresh; control telemetry is delayed.
+        self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.tv.status_enabled = True
+        self.wait(lambda: self.app.peer.status_seen > before + 1_000_000_000)
+        self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.assertFalse(self.app.mpv.paused)
+
+    def test_fresh_status_with_a_truly_frozen_frame_still_pauses(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        self.wait(lambda: self.app.drift_ms is not None)
+        self.tv.freeze_frames = True
+        self.wait(lambda: self.app.state == 'error', seconds=2)
+        self.assertIn('Unique video frame telemetry stalled', self.app.error)
+        self.assertTrue(self.app.mpv.paused)
+        self.assertLess(ns() - self.app.peer.status_seen, 500_000_000)
+
+    def test_transient_rejected_clock_fit_does_not_latch_a_playback_error(self):
+        from dataclasses import replace
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        clock = self.app.peer.clock
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                first = self.app.latest_anchor['sequence']
+                actual = clock.best
+                def unusable(now):
+                    model = actual(now)
+                    return None if missing else replace(model, uncertainty_ns=12_200_000)
+                with patch.object(clock, 'best', side_effect=unusable):
+                    time.sleep(.05)
+                    delivered = self.app.delivered_anchor['sequence']
+                    time.sleep(.2)
+                    self.assertEqual(self.app.state, 'playing', self.app.error)
+                    self.assertEqual(self.app.timing_error, '')
+                    self.assertGreater(self.app.latest_anchor['sequence'], first)
+                    self.assertEqual(self.app.delivered_anchor['sequence'], delivered)
+                self.wait(lambda: self.app.delivered_anchor['sequence'] > delivered)
+                self.assertEqual(self.app.state, 'playing', self.app.error)
+        self.assertEqual(self.tv.speed_commands, 0)
+        self.assertFalse(any(c[:2] == ('set_property', 'speed') for c in self.app.mpv.commands))
+
+    def test_valid_affine_confidence_keeps_playing_despite_high_path_rtt(self):
+        from dataclasses import replace
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        self.wait(lambda: self.app.drift_ms is not None)
+        clock = self.app.peer.clock; actual = clock.best
+        epoch, corrections = self.app.epoch, self.app.diagnostics.sample_count
+        # Path delay alone is not affine-clock uncertainty. A valid current
+        # interval may be narrower than half of one delayed exchange's RTT.
+        with patch.object(clock, 'best', side_effect=lambda now: replace(actual(now),
+                rtt_ns=46_000_000, uncertainty_ns=10_900_000)):
+            time.sleep(3.4)  # Exceeds the old monitor's independent RTT deadline.
+            self.assertEqual(self.app.state, 'playing', self.app.error)
+            self.assertEqual(self.app.epoch, epoch)
+            self.assertGreater(self.app.diagnostics.sample_count, corrections)
+            self.assertLess(ns() - self.app.delivered_anchor['host_ns'], 250_000_000)
+        self.assertFalse(self.app.mpv.paused)
+
+    def test_affine_start_uses_phase_confidence_instead_of_baseline_rtt_limit(self):
+        from dataclasses import replace
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        clock = self.app.peer.clock; actual = clock.best
+        with patch.object(clock, 'best', side_effect=lambda now: replace(actual(now),
+                rtt_ns=46_000_000, uncertainty_ns=10_900_000)):
+            self.app.action({'action': 'play'})
+            self.assertEqual(self.app.state, 'playing')
+            self.assertFalse(self.app.mpv.paused)
+
+    def test_baseline_retains_its_round_trip_limit_at_start_and_monitoring(self):
+        from dataclasses import replace
+        from host.sync import VideoServo
+        self.app.sync_mode = 'baseline'
+        self.app.servo = VideoServo()
+        self.tv = test_core.SimulatedTV(self.runtime.args.control_port, self.app.pair_token)
+        self.wait(lambda: self.app.peer and self.app.peer.clock.best(ns()) is not None)
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        clock = self.app.peer.clock; actual = clock.best
+        with patch.object(clock, 'best', side_effect=lambda now: replace(actual(now), rtt_ns=46_000_000)):
+            with self.assertRaisesRegex(RuntimeError, 'round-trip'):
+                self.app.action({'action': 'play'})
+        self.app.action({'action': 'play'})
+        self.wait(lambda: self.app.drift_ms is not None)
+        with patch.object(clock, 'best', side_effect=lambda now: replace(actual(now), rtt_ns=46_000_000)):
+            self.wait(lambda: self.app.state == 'error', seconds=4)
+            self.assertIn('Clock measurements too uncertain', self.app.error)
+            self.assertTrue(self.app.mpv.paused)
+
+    def test_sustained_rejected_clock_fit_expires_delivery_without_stopping_source_sampling(self):
+        from dataclasses import replace
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        clock = self.app.peer.clock; actual = clock.best
+        with patch.object(clock, 'best', side_effect=lambda now: replace(actual(now), uncertainty_ns=12_200_000)):
+            started = time.monotonic()
+            self.wait(lambda: self.app.state == 'error', seconds=3)
+            self.assertLess(time.monotonic() - started, 2.4)
+            self.assertIn('delivery expired', self.app.error)
+            self.assertLess(self.app.last_failure['sync']['source_sampler']['observation_age_ms'], 250)
+        self.assertTrue(self.app.mpv.paused)
+        self.assertFalse(self.app.audio_running.is_set())
+        self.assertEqual(self.tv.speed_commands, 0)
+
+    def test_blocked_timing_write_cannot_stall_local_audio_observations(self):
+        self.connect()
+        self.app.action({'action': 'load', 'path': str(self.movie)})
+        self.app.action({'action': 'play'})
+        link = self.app.peer.timing; original = link.send
+        entered, release = threading.Event(), threading.Event()
+        def blocked(message):
+            if message.get('op') == 'anchor' and not entered.is_set():
+                entered.set(); release.wait(1.5)
+            return original(message)
+        link.send = blocked
+        try:
+            self.assertTrue(entered.wait(1))
+            first = self.app.latest_anchor['host_ns']
+            time.sleep(.85)
+            self.assertEqual(self.app.state, 'playing', self.app.error)
+            self.assertGreater(self.app.latest_anchor['host_ns'] - first, 600_000_000)
+            self.assertLess(ns() - self.app.latest_anchor['host_ns'], 250_000_000)
+            newest = self.app.latest_anchor['sequence']
+            release.set()
+            self.wait(lambda: self.app.delivered_anchor['sequence'] >= newest)
+            self.assertLess(ns() - self.app.delivered_anchor['host_ns'], 250_000_000)
+            self.assertEqual(self.app.state, 'playing', self.app.error)
+        finally:
+            release.set()
 
     def test_start_seek_and_stream_loss_never_change_audio_or_compete_with_clock(self):
         self.connect()

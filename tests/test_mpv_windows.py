@@ -80,6 +80,19 @@ class RealMpvTests(unittest.TestCase):
             self.assertLess(abs(time.perf_counter_ns() - sample['host_ns']), 3_000_000_000)
             self.assertGreaterEqual(sample['uncertainty_ms'], 0)
 
+    def test_explicit_audio_choice_uses_native_user_data_without_json_quotes(self):
+        self.audio = Mpv(os.environ['DUALTHEATER_MPV'], None, Path(self.tmp.name), diagnostic=True)
+        with patch('host.mpv.subprocess.Popen', side_effect=self.null_output): self.audio.launch()
+        # A default first track would hide a broken explicit numeric choice.
+        # Disable it first, then re-enable it through the actual preload hook.
+        for choice in ('no', '1'):
+            self.audio.command('set_property', 'user-data/dualtheater-aid', choice)
+            self.audio.command('loadfile', str(self.wav), 'replace')
+            expected = False if choice == 'no' else 1
+            self.wait(lambda: self.audio.get('options/aid') == expected)
+            if choice == '1':
+                self.wait(lambda: self.audio.get('audio-out-params'))
+
     def test_truehd_packet_path_and_seek_with_null_output(self):
         clip = Path(__file__).resolve().parents[1] / 'calibration-SDR-TrueHD-no-Atmos.mkv'
         if not clip.exists(): self.skipTest('Generate calibration clip first')

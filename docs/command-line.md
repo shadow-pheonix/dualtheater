@@ -1,6 +1,6 @@
 # Advanced source/command-line guide
 
-These commands describe stable **1.0.0** on `main`, including audio-clock synchronization and optional [phone calibration](phone-calibration.md). Source launch defaults to `audio-clock` and `%LOCALAPPDATA%\DualTheater-RobustSync`; use `-SyncMode baseline` or `-SyncMode servo` for advanced comparisons. `Start-Desktop.cmd` opens the native source UI. Keep an existing custom `--data-dir` when updating to retain that profile.
+These commands describe stable **2.0.0** on `main`, including audio-clock synchronization and recommended [phone calibration](phone-calibration.md). Source launch defaults to `audio-clock` and `%LOCALAPPDATA%\DualTheater-RobustSync`; use `-SyncMode baseline` or `-SyncMode servo` for advanced comparisons. `Start-Desktop.cmd` opens the native source UI. Keep an existing custom `--data-dir` when updating to retain that profile.
 
 The portable Windows EXE is the recommended interface; see the [main README](../README.md#how-to-use). This optional guide is for running the Python source host. The source ZIP still requires Python and mpv. Do not run it alongside the desktop EXE because both use the same default service ports. ADB is only an optional TV installation method.
 
@@ -18,19 +18,19 @@ Download the files using the links above, or run this in PowerShell:
 $downloadDir = Join-Path $env:USERPROFILE 'Downloads\DualTheater'
 New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
 Set-Location -LiteralPath $downloadDir
-$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v1.0.0'
-$files = @('DualTheater-v1.0.0.zip', 'DualTheater-TV-v1.0.0-debug.apk', 'SHA256SUMS.txt')
+$releaseUrl = 'https://github.com/shadow-pheonix/dualtheater/releases/download/v2.0.0'
+$files = @('DualTheater-v2.0.0.zip', 'DualTheater-TV-v2.0.0-debug.apk', 'SHA256SUMS.txt')
 foreach ($file in $files) {
     Invoke-WebRequest -Uri "$releaseUrl/$file" -OutFile $file
 }
-Get-FileHash .\DualTheater-v1.0.0.zip, .\DualTheater-TV-v1.0.0-debug.apk -Algorithm SHA256
+Get-FileHash .\DualTheater-v2.0.0.zip, .\DualTheater-TV-v2.0.0-debug.apk -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
 Compare each file's hash with its matching line in `SHA256SUMS.txt`. Then extract into a fresh folder and enter the directory containing `Start.cmd`:
 
 ```powershell
-Expand-Archive -LiteralPath .\DualTheater-v1.0.0.zip -DestinationPath .\extracted
+Expand-Archive -LiteralPath .\DualTheater-v2.0.0.zip -DestinationPath .\extracted
 Set-Location .\extracted\dualtheater
 ```
 
@@ -104,6 +104,8 @@ Close that test player before starting DualTheater. Independently confirm normal
 5. Confirm the TV's active HDR mode and the soundbar/receiver's Atmos indication independently. Software status alone does not prove correct physical output.
 
 Allow Python on the private home network if prompted. Discovery uses UDP 8767, control TCP 8766 and media TCP 8765. The browser controller binds to localhost on TCP 8764; it is not a browser remote for the phone or TV. Guest-network isolation, VPN routing or firewall rules may block discovery. Use the remembered-computer shortcut or **Advanced connection** if needed; see [connection setup](easy-connection.md).
+
+Matching 2.0 clients negotiate [UDP timing](datagram-timing.md) on the selected control port number (default UDP 8766). Allow that traffic on the private LAN; older 1.0 clients continue using TCP timing.
 
 ## Operating the player
 

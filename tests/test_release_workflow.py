@@ -30,6 +30,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_stable_release_passes_one_latest_flag(self):
         self.assertEqual(self.flags_for('v1.0.0'), ['--latest'])
+        self.assertEqual(self.flags_for('v2.0.0'), ['--latest'])
 
     def test_beta_release_retains_prerelease_flags(self):
         self.assertEqual(self.flags_for('v1.0.1-beta.1'), ['--prerelease', '--latest=false'])

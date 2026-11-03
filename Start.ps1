@@ -42,6 +42,6 @@ $launchArgs = @('-m', 'host.server', '--mpv', $MpvPath, '--sync-mode', $SyncMode
 if ($Device) { $launchArgs += @('--device', $Device) }
 if ($LanAddress) { $launchArgs += @('--host', $LanAddress) }
 if ($Diagnostic) { $launchArgs += '--diagnostic' }
-Write-Host 'DualTheater 1.0.0. Open http://localhost:8764 after startup. Ctrl+C stops playback.'
+Write-Host 'DualTheater. Open http://localhost:8764 after startup. Ctrl+C stops playback.'
 & $PythonPath @launchArgs
 exit $LASTEXITCODE

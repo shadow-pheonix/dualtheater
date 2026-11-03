@@ -45,7 +45,7 @@ final class AudioClockRenderer extends ForwardingRenderer implements MediaClock 
         long positionUs, boolean joining, boolean mayRenderStart, long startPositionUs,
         long offsetUs, MediaSource.MediaPeriodId periodId) throws ExoPlaybackException {
         streamOffsetUs = offsetUs;
-        timeline.resetPosition(positionUs - offsetUs, System.nanoTime());
+        timeline.rendererResetPosition(positionUs - offsetUs, System.nanoTime());
         super.enable(config, formats, stream, positionUs, joining, mayRenderStart,
                      startPositionUs, offsetUs, periodId);
     }
@@ -55,7 +55,7 @@ final class AudioClockRenderer extends ForwardingRenderer implements MediaClock 
         super.replaceStream(formats, stream, startPositionUs, offsetUs, periodId);
     }
     @Override public void resetPosition(long positionUs, boolean keyframe) throws ExoPlaybackException {
-        timeline.resetPosition(positionUs - streamOffsetUs, System.nanoTime());
+        timeline.rendererResetPosition(positionUs - streamOffsetUs, System.nanoTime());
         super.resetPosition(positionUs, keyframe);
     }
     @Override public void start() throws ExoPlaybackException {
@@ -63,7 +63,8 @@ final class AudioClockRenderer extends ForwardingRenderer implements MediaClock 
         super.start();
     }
     @Override public void stop() {
-        if (enabled) timeline.stop(System.nanoTime());
+        // Media3 also stops this VIDEO renderer during buffering. HDMI audio is
+        // independent and keeps running; host epoch resets own actual pauses.
         super.stop();
     }
     @Override public void render(long positionUs, long elapsedUs) throws ExoPlaybackException {

@@ -1,11 +1,13 @@
-# DualTheater Calibration — phone client
+# DualTheater Companion — phone calibration
 
-Phone version **1.0.0** accompanies Windows/TV **1.0.0** on `main` and retains the earlier preview package identity for upgrade continuity. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
+**Recommended for improving physical lip-sync.** Increase the soundbar/receiver volume before starting so the microphone can detect all six beeps clearly. Version 2.0 Companion includes a pre-start volume reminder and player/library controls; follow [its operating guide](next-version.md) for those pages.
+
+Phone version **2.0.0** accompanies Windows/TV **2.0.0** on `main` and retains the earlier preview package identity for upgrade continuity. No separate physical reference fixture is required. The client estimates sound/picture offset from camera exposure timestamps and microphone capture-sample timestamps. Absolute physical accuracy remains unvalidated.
 
 ## Install and connect
 
 1. Run the matching Windows host and connect **DualTheater TV** normally. Preserve the base apps; published `0.4.1-beta.1` does not support this phone client. Run only one Windows host at a time.
-2. Sideload the phone APK, `calibration-debug.apk` from the module build output or `DualTheater-Calibration-v1.0.0-debug.apk` when packaged. Open **DualTheater Calibration**. Android 8 or newer is required. Its package, `dev.dualtheater.calibration.preview`, is separate from the TV/base apps.
+2. Sideload the phone APK, `calibration-debug.apk` from the module build output or `DualTheater-Calibration-v2.0.0-debug.apk` when packaged. Open **DualTheater Companion**, then **Calibrate**. Android 8 or newer is required. Its package, `dev.dualtheater.calibration.preview`, is separate from the TV/base apps.
 3. Put the phone, TV and computer on the same trusted LAN. On the phone, press **Find computers**, select the computer, enter the six-digit code shown on Windows **Connect** (or its source-host terminal/browser) and press **Connect**.
 4. Later connections reuse a private per-phone credential; leave the code empty for saved pairing. If discovery is blocked, enter the LAN address and control port manually. Default control TCP 8766 and discovery UDP 8767 are shared with the TV; no additional port is required. The phone has a separate calibration role and does not occupy the TV socket.
 
@@ -13,9 +15,9 @@ Connections retain the project's cleartext, trusted-LAN model. Do not expose the
 
 ## Run and apply
 
-For a build comparison, select the desired mode on Windows **Connect** while disconnected, reconnect/reload and start at zero Video lead. The phone status identifies the mode. Complete a test without Apply to measure first; each mode saves its own correction only after Apply. See the [comparison procedure](robust-sync.md). Main 1.0 supports the phone; the historical 0.4.1 baseline does not. For a same-clip comparison use 1.0's baseline mode.
+For a build comparison, select the desired mode on Windows **Connect** while disconnected, reconnect/reload and start at zero Video lead. The phone status identifies the mode. Complete a test without Apply to measure first; each mode saves its own correction only after Apply. See the [comparison procedure](robust-sync.md). Main 2.0 supports the phone; the historical 0.4.1 baseline does not. For a same-clip comparison use the current baseline mode.
 
-1. Position the phone steadily at the listening seat, in landscape, with the TV centered in the camera guide. Keep the room quiet and use the built-in microphone; Bluetooth, USB and headset input are unsupported in v1.
+1. Position the phone steadily at the listening seat, in landscape, with the TV centered in the camera guide. Keep the room quiet and use the built-in microphone; Bluetooth, USB and headset input are unsupported for capture.
 2. Press **Start calibration / verify again** and grant camera/microphone permissions. This replaces the current movie with the reference clip; reload the movie afterward.
 3. The phone stabilizes exposure and capture clocks before asking Windows to play the reference through the existing coordinated TV/HDMI path. Keep still until six flash/beep pairs are detected. The 22-second reference uses irregular intervals and 1 kHz/40 ms beeps, avoiding silent whole-period pairing errors.
 4. Capture stops and numerical measurements go to Windows. Both players pause. Review sound-early/sound-late timing, repeat spread, capture-resolution estimate and suggested **Video lead**.
@@ -66,7 +68,7 @@ No generic camera/microphone delivery delay is added. A separate reference fixtu
 
 Camera frames and PCM stay in memory and are discarded. No recordings are saved/uploaded. Only numerical measurements, status and pairing/control messages travel to Windows. Private Android preferences retain pairing and host selection; backup is disabled. There is no background camera/microphone service.
 
-- **Unsupported timestamps / exposure lock:** this phone's selected camera is unsupported in v1.
+- **Unsupported timestamps / exposure lock:** this phone's selected camera is unsupported for capture.
 - **Missing cues / excessive variation:** center the TV, steady the phone, reduce noise, make the test beep audible and retry. Brighten the screen/room if shorter exposure is requested.
 - **Stalled capture / changed microphone route:** close other capture apps, disconnect headsets and retry.
 - **Playback changed / resynchronization occurred:** wait for stability and start a new test; measurements across recovery/seek are rejected.
