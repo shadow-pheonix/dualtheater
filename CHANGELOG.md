@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1-beta.1 — unreleased
+
+- Align TV anchor holdover with the existing three-second timing-link deadline while retaining the uncertainty ceiling, stale-anchor rejection and original audio/video correction math.
+- Preserve accepted-anchor age and uncertainty in privacy-safe failure diagnostics.
+- Reproduce recovery after a 2.6-second delivery gap in a regression test; whole-movie validation remains pending. Published 2.0.0 artifacts are unchanged.
+
 ## 2.0.0 — 2026-11-03
 
 - Promote the finalized beta.4 playback path after a 15-minute uninterrupted movie run and user-confirmed continuous audio/in-sync dialogue. Whole-movie testing remains pending.

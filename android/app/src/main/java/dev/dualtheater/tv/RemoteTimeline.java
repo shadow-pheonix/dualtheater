@@ -5,7 +5,9 @@ final class RemoteTimeline {
     // Match the host's source-rate / clock-rate envelope and summed confidence.
     private static final double MIN_ANCHOR_RATE = .999 / 1.001, MAX_ANCHOR_RATE = 1.001 / .999;
     private static final double MAX_UNCERTAINTY_MS = 22, HOLDOVER_ERROR_PER_MS = .004;
-    private static final long MAX_HOLDOVER_NS = 2_000_000_000L;
+    // Match the dedicated timing transport's three-second liveness window.
+    // Confidence can still expire earlier; this does not renew old anchors.
+    private static final long MAX_HOLDOVER_NS = 3_000_000_000L;
     private long epoch, sequence, lastNs, positionUs, anchorNs, anchorUs, receivedNs;
     private double rate = 1, uncertaintyMs, phaseMs, maxDispatchDelayMs;
     private boolean running, armed, observed;

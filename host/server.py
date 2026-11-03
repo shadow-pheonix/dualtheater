@@ -375,6 +375,8 @@ class Coordinator:
             remote_clock_state=vocabulary(remote.get('state'),
                 ('paused', 'acquiring', 'locked', 'slewing', 'holdover', 'audio_anchor_expired', 'audio_phase_jump')),
             remote_clock_phase_ms=number(remote.get('phase_error_ms')),
+            remote_clock_anchor_age_ms=number(remote.get('anchor_age_ms'), 0),
+            remote_clock_uncertainty_ms=number(remote.get('uncertainty_ms'), 0),
             rendered_callback_present=bool(observed),
             release_to_render_ms=number((observed['rendered_ns'] - observed['release_ns']) / 1e6, 0, 500)
                 if type(observed.get('rendered_ns')) is int and type(observed.get('release_ns')) is int else None)

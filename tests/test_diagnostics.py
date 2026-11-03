@@ -41,7 +41,8 @@ class DiagnosticReportTests(unittest.TestCase):
             app.peer = SimpleNamespace(closed=False, status_seen=now,
                 clock=SimpleNamespace(best=lambda _: ClockEstimate(0, 1_000_000, now)),
                 status={'epoch': app.epoch, 'private': 'PRIVATE_FAULT_SENTINEL',
-                        'remote_clock': {'state': 'audio_phase_jump', 'phase_error_ms': 172}})
+                        'remote_clock': {'state': 'audio_phase_jump', 'phase_error_ms': 172,
+                            'anchor_age_ms': 2600, 'uncertainty_ms': 18}})
             def reset(reason):
                 app.state = reason
                 app.peer.status = {'epoch': app.epoch, 'remote_clock': {'state': 'paused'}}
@@ -52,6 +53,8 @@ class DiagnosticReportTests(unittest.TestCase):
                 self.assertEqual(report['sync']['remote_clock_state'], 'paused')
                 self.assertEqual(report['last_failure']['sync']['remote_clock_state'], 'audio_phase_jump')
                 self.assertEqual(report['last_failure']['sync']['remote_clock_phase_ms'], 172)
+                self.assertEqual(report['last_failure']['sync']['remote_clock_anchor_age_ms'], 2600)
+                self.assertEqual(report['last_failure']['sync']['remote_clock_uncertainty_ms'], 18)
                 self.assertNotIn('PRIVATE_FAULT_SENTINEL', json.dumps(report))
                 self.assertNotIn('last_failure', report['last_failure'])
             finally:
@@ -99,10 +102,13 @@ class DiagnosticReportTests(unittest.TestCase):
             now, offset = ns(), 8_000_000_000
             clock = SimpleNamespace(best=lambda _: ClockEstimate(offset, 1_000_000, now))
             app.peer = SimpleNamespace(closed=False, status_seen=now, clock=clock,
-                status={'epoch': app.epoch, 'remote_clock': {'state': 'locked', 'phase_error_ms': 2},
+                status={'epoch': app.epoch, 'remote_clock': {'state': 'locked', 'phase_error_ms': 2,
+                        'anchor_age_ms': 2500, 'uncertainty_ms': 17},
                         'rendered_frame': {'epoch': app.epoch, 'release_ns': now + offset - 10_000_000,
                                            'rendered_ns': now + offset}})
             self.assertTrue(app.diagnostic_report()['sync']['rendered_callback_present'])
+            self.assertEqual(app.diagnostic_report()['sync']['remote_clock_anchor_age_ms'], 2500)
+            self.assertEqual(app.diagnostic_report()['sync']['remote_clock_uncertainty_ms'], 17)
             app.peer.status['read_ahead'] = {'state': 'running', 'ahead_bytes': 128000,
                 'cache_bytes': 256000, 'private_uri': 'PRIVATE_CACHE_SENTINEL',
                 'downloaded_bytes': float('nan'), 'failures': '2',
@@ -119,6 +125,8 @@ class DiagnosticReportTests(unittest.TestCase):
             report = app.diagnostic_report()['sync']
             self.assertFalse(report['rendered_callback_present'])
             self.assertEqual(report['remote_clock_state'], 'unknown')
+            self.assertIsNone(report['remote_clock_anchor_age_ms'])
+            self.assertIsNone(report['remote_clock_uncertainty_ms'])
             self.assertEqual(app.diagnostic_report()['telemetry']['read_ahead']['state'], 'unknown')
             app.peer.status_seen = ns()
             app.peer.status.update(remote_clock='malformed', rendered_frame=['malformed'])

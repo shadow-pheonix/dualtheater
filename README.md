@@ -4,6 +4,8 @@
 
 **Stable release: 2.0.0.** Native TV video and untouched HDMI audio, with authenticated UDP timing, shared track controls and movie browsing. The tested setup completed 15 uninterrupted minutes with zero reported errors or dropped video frames; the user confirmed continuous audio and in-sync dialogue. Whole-movie, broader hardware and instrumented accuracy testing continue.
 
+A later long-session test encountered a timing-confidence pause. An **unreleased 2.0.1-beta.1 candidate** is being tested for brief timing-delivery gaps; the downloads below remain 2.0.0. See [current findings and validation](docs/context.md#current-release-instruction--2026-11-03). If playback stops with a timing-confidence error, let the connection stabilize and use the normal **Play** control to resume both devices together; persistent faults need diagnosis.
+
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
 Version 2 adds embedded subtitles and audio choices across Windows, TV and phone, shared-folder/Android browsing, TV audio badges and guided navigation. It retains the **v1.0 video correction math**, with explicit clock-input, renderer-lifecycle and delivery fixes. Matching clients use [dedicated UDP timing](docs/datagram-timing.md), while movie bytes and playback commands use TCP. See the [complete operating guide](docs/next-version.md).

@@ -4,6 +4,31 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class RemoteTimelineTest {
+    @Test public void deliveryCanRecoverWithinTransportDeadlineWhileConfidenceRemainsBounded() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        long lead = 137_000; // Generic calibration fixture, not a device profile.
+        long video = start - lead * 1000;
+        t.arm(1, 0, start, video, lead, 0); t.start(video); t.read(start);
+        assertTrue(t.accept(1, 1, start, lead, 1, 7.5, start));
+        for (int i = 1; i <= 260; i++) t.read(start + i * 10_000_000L);
+        assertEquals("holdover", t.state(start + 2_600_000_000L));
+        assertTrue(t.uncertaintyMs(start + 2_600_000_000L) < 22);
+        assertEquals(lead + 2_600_000, t.read(start + 2_600_000_000L), 1);
+        assertTrue(t.accept(1, 2, start + 2_600_000_000L, lead + 2_600_000,
+            1, 7.5, start + 2_600_000_000L));
+        assertEquals("locked", t.state(start + 2_600_000_000L));
+        assertEquals(lead + 2_600_000, t.read(start + 2_600_000_000L), 1);
+    }
+
+    @Test public void absentTimingStillExpiresAtTheTransportDeadline() {
+        RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
+        t.arm(1, 0, start, start, 0, 0); t.start(start);
+        assertTrue(t.accept(1, 1, start, 0, 1, 1, start));
+        assertEquals("holdover", t.state(start + 2_900_000_000L));
+        t.read(start + 3_010_000_000L);
+        assertEquals("audio_anchor_expired", t.state(start + 3_010_000_000L));
+    }
+
     @Test public void nativeRendererRebufferCannotFreezeOrRepositionTheExternalMaster() {
         RemoteTimeline t = new RemoteTimeline(); long start = 1_000_000_000L;
         t.arm(1, 0, start, start, 0, 0); t.start(start);
@@ -29,9 +54,9 @@ public class RemoteTimelineTest {
         assertTrue(t.accept(1, 3, start + 1_300_000_000L, 1_300_000, 1, 1, start + 1_300_000_000L));
         assertEquals(1_300_000, t.read(start + 1_300_000_000L), 1);
         assertEquals("locked", t.state(start + 1_300_000_000L));
-        long frozen = t.read(start + 3_400_000_000L);
-        assertEquals("audio_anchor_expired", t.state(start + 3_400_000_000L));
-        assertEquals(frozen, t.read(start + 4_000_000_000L));
+        long frozen = t.read(start + 4_400_000_000L);
+        assertEquals("audio_anchor_expired", t.state(start + 4_400_000_000L));
+        assertEquals(frozen, t.read(start + 5_000_000_000L));
     }
 
     @Test public void holdoverExpiresEarlierWhenConfidenceIsExhausted() {
@@ -125,8 +150,8 @@ public class RemoteTimelineTest {
         }
         assertEquals("locked", t.state(start + 29_990_000_000L));
         assertEquals("holdover", t.state(start + 30_300_000_000L));
-        long frozen = t.read(start + 31_000_000_000L);
-        assertEquals(frozen, t.read(start + 32_000_000_000L));
-        assertEquals("audio_anchor_expired", t.state(start + 32_000_000_000L));
+        long frozen = t.read(start + 33_100_000_000L);
+        assertEquals(frozen, t.read(start + 34_000_000_000L));
+        assertEquals("audio_anchor_expired", t.state(start + 34_000_000_000L));
     }
 }
