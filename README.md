@@ -2,7 +2,7 @@
 
 # DualTheater
 
-**Release: 2.0.0.** Native TV video and untouched HDMI audio, with authenticated UDP timing, shared track controls and movie browsing. The tested setup completed 15 uninterrupted minutes with zero reported errors or dropped video frames; the user confirmed continuous audio and in-sync dialogue. Whole-movie, broader hardware and instrumented accuracy testing continue.
+**Stable release: 2.0.0.** Native TV video and untouched HDMI audio, with authenticated UDP timing, shared track controls and movie browsing. The tested setup completed 15 uninterrupted minutes with zero reported errors or dropped video frames; the user confirmed continuous audio and in-sync dialogue. Whole-movie, broader hardware and instrumented accuracy testing continue.
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
