@@ -1,0 +1,442 @@
+{
+  "verification_date": "2026-11-04",
+  "source_commit": "099dfe0980c476e45f6b4299b641dbea82b6181d",
+  "runtime_code_commit": "3c4945c46b0c3c1041b9e281b74f633abb054d07",
+  "scope": "Isolated fake media, temporary profiles and loopback sockets; no existing host, ADB, GUI, physical playback, bandwidth benchmark or application-code modification.",
+  "classification_counts": {
+    "defect_reproduced": 12,
+    "mechanism_only": 1,
+    "documented_limitation": 1,
+    "resolved": 0
+  },
+  "jvm_scope": "Current ControlClient/TimingClient/RemoteTimeline/ReadAheadCache/ReadAheadWindow/BufferedByteReader compiled; inert Android/cache APIs. Current Activity status/subtitle method bodies extracted unchanged; JSON API substitute backed by cached Gson 2.11.0.",
+  "findings": {
+    "AUD-001": {
+      "classification": "defect_reproduced",
+      "title": "Windows can overwrite phone calibration with a stale manual field",
+      "verification": "The actual desktop status/save methods were rerun with inert widget holders and an isolated coordinator. Applying a generic 137.25 ms phone correction left the manual field at 0; Save replaced the correction with 0 and source manual.",
+      "limits": "No Tk window, phone or physical output was used; only the actual desktop methods and offset action were exercised.",
+      "observations": {
+        "phone_applied_ms": 137.25,
+        "manual_field_after_status": "0",
+        "saved_lead_after_apply_button_ms": 0.0,
+        "saved_source": "manual"
+      }
+    },
+    "AUD-002": {
+      "classification": "defect_reproduced",
+      "title": "Invalid seek input interrupts valid playback",
+      "verification": "The actual exact-seek method submitted nan, -1 and 999 for a 300-second fake movie. Each was rejected by the real coordinator and produced an error state plus audio/TV pauses.",
+      "limits": "The GUI parser and coordinator were exercised with value holders and fake endpoints; no live movie was queried.",
+      "observations": [
+        {
+          "desktop_input": "nan",
+          "submitted_to_coordinator": true,
+          "state_after_rejection": "error",
+          "audio_paused": true,
+          "tv_pause_sent": true
+        },
+        {
+          "desktop_input": "999",
+          "submitted_to_coordinator": true,
+          "state_after_rejection": "error",
+          "audio_paused": true,
+          "tv_pause_sent": true
+        },
+        {
+          "desktop_input": "-1",
+          "submitted_to_coordinator": true,
+          "state_after_rejection": "error",
+          "audio_paused": true,
+          "tv_pause_sent": true
+        }
+      ]
+    },
+    "AUD-003": {
+      "classification": "defect_reproduced",
+      "title": "A cancelled TV connection can still open and leak its socket",
+      "verification": "The current ControlClient was recompiled and exercised in 100 immediate connect/close races. All 100 produced a hello and left the accepted socket open in this run.",
+      "limits": "Real Java sockets/threads and current controller code; minimal Build/JSON stubs. This does not establish Android scheduling incidence or a full authenticated host handshake.",
+      "observations": {
+        "cancelled_clients": 100,
+        "hello_after_cancel": 100,
+        "sockets_left_open": 100
+      }
+    },
+    "AUD-004": {
+      "classification": "defect_reproduced",
+      "title": "The first endpoint reaching EOF truncates the other track",
+      "verification": "The current monitor paused both endpoints for either video-first or audio-first EOF, while a neither-ended control kept playing. The permitted positive 1,000 ms lead fixture ended video at 300 seconds with audio still at 299 seconds and eof-reached false; audio was paused with one second remaining.",
+      "limits": "Actual monitor with fake endpoints and signed-lead state; panel and HDMI drain timing were not measured.",
+      "observations": {
+        "cases": [
+          {
+            "first_endpoint": "video",
+            "state": "ended",
+            "audio_paused": true,
+            "tv_pause_attempted": true
+          },
+          {
+            "first_endpoint": "audio",
+            "state": "ended",
+            "audio_paused": true,
+            "tv_pause_attempted": true
+          },
+          {
+            "first_endpoint": "neither",
+            "state": "playing",
+            "audio_paused": false,
+            "tv_pause_attempted": false
+          }
+        ],
+        "signed_lead_fixture": {
+          "audio_eof_before": false,
+          "audio_tail_ms": 1000,
+          "video_lead_ms": 1000,
+          "state_after_one_monitor_tick": "ended",
+          "audio_paused": true
+        }
+      }
+    },
+    "AUD-005": {
+      "classification": "defect_reproduced",
+      "title": "Baseline control traffic can hide indefinitely stale TV video status",
+      "verification": "With real coordinator/control sockets and synthetic status suppression, baseline remained playing after 3.315 seconds of stale status while control pongs remained fresh (477 ms) and audio advanced 3.3 seconds. Servo and audio-clock negative controls stopped on TV telemetry is stale after about two seconds, because their ordinary control traffic also stopped.",
+      "limits": "Verified for baseline with live pongs. The broad claim is narrowed: ordinary status loss in the tested servo/audio-clock path is already bounded. A physically frozen TV/main thread was not induced.",
+      "observations": [
+        {
+          "mode": "baseline",
+          "status_age_ms": 3315,
+          "control_age_ms": 477,
+          "state": "playing",
+          "audio_advanced_ms": 3300,
+          "epoch_unchanged": true,
+          "error": ""
+        },
+        {
+          "mode": "servo",
+          "status_age_ms": 3325,
+          "control_age_ms": 1228,
+          "state": "error",
+          "audio_advanced_ms": 2072,
+          "epoch_unchanged": false,
+          "error": "TV telemetry is stale"
+        },
+        {
+          "mode": "audio-clock",
+          "status_age_ms": 3308,
+          "control_age_ms": 1211,
+          "state": "error",
+          "audio_advanced_ms": 2089,
+          "epoch_unchanged": false,
+          "error": "TV telemetry is stale"
+        }
+      ]
+    },
+    "AUD-006": {
+      "classification": "defect_reproduced",
+      "title": "Simultaneous TV handshakes can both claim the single-TV slot",
+      "verification": "Two real authenticated control handlers were scheduled together immediately after the unprotected availability check by a barrier in peer construction. Both received welcome and remained live, while only one peer was the coordinator owner.",
+      "limits": "This deterministically exposes a permitted thread interleaving; natural race frequency and device-level consequences were not measured.",
+      "observations": {
+        "status": "reproduced",
+        "welcomed_sessions": 2,
+        "live_peers": 2,
+        "coordinator_owners": 1,
+        "scope": "Real authenticated control handlers; a barrier schedules construction immediately after the unprotected availability check."
+      }
+    },
+    "AUD-007": {
+      "classification": "defect_reproduced",
+      "title": "Rejected load and offset requests can stop the current movie",
+      "verification": "Five real coordinator actions (missing path, unsupported existing file, NaN offset, offset above/below range) preserved the original media but moved playback to error, advanced the epoch and paused both endpoints. Rejecting an unknown audio track, which is validated before ownership, preserved playing state and epoch.",
+      "limits": "Extends AUD-002 rather than adding an independent root cause. Media and endpoint fixtures were synthetic.",
+      "observations": {
+        "cases": [
+          {
+            "input": "missing_load",
+            "state": "error",
+            "epoch_advanced": true,
+            "audio_paused": true,
+            "tv_pause_attempted": true,
+            "media_unchanged": true
+          },
+          {
+            "input": "unsupported_load",
+            "state": "error",
+            "epoch_advanced": true,
+            "audio_paused": true,
+            "tv_pause_attempted": true,
+            "media_unchanged": true
+          },
+          {
+            "input": "offset_nan",
+            "state": "error",
+            "epoch_advanced": true,
+            "audio_paused": true,
+            "tv_pause_attempted": true,
+            "media_unchanged": true
+          },
+          {
+            "input": "offset_high",
+            "state": "error",
+            "epoch_advanced": true,
+            "audio_paused": true,
+            "tv_pause_attempted": true,
+            "media_unchanged": true
+          },
+          {
+            "input": "offset_low",
+            "state": "error",
+            "epoch_advanced": true,
+            "audio_paused": true,
+            "tv_pause_attempted": true,
+            "media_unchanged": true
+          }
+        ],
+        "negative_control": "Rejected unknown track preserves playing/epoch; confirms validation can avoid the failure boundary."
+      }
+    },
+    "AUD-008": {
+      "classification": "defect_reproduced",
+      "title": "Failed audio-track selection leaves no rollback to the working track",
+      "verification": "The real track action and preparation path selected a catalog-supported AC-3 fixture that the actual Mpv.verify method rejected as PCM output. The coordinator entered error and left aid=2 selected. Explicitly restoring aid=1 still verified TrueHD passthrough, proving that the prior choice was viable in the fixture.",
+      "limits": "The endpoint response was simulated; no real HDMI codec failure was induced. The test verifies rollback omission, not hardware codec support.",
+      "observations": {
+        "state": "error",
+        "selected_aid_after_failure": "2",
+        "audio_paused": true,
+        "previous_aid_restored": false,
+        "old_track_still_verifies": true
+      }
+    },
+    "AUD-009": {
+      "classification": "mechanism_only",
+      "title": "Same-URI seek can temporarily prefetch the previous byte position",
+      "verification": "The actual cache controller, tracking source and buffered reader were compiled with inert cache/Android APIs. Opening the same URI at byte 209,715,200 retained the previous head 1,310,720. After READY, the real worker requested prefetch at 1,310,720; consuming the 256 KiB notification threshold updated the head to 209,977,344.",
+      "limits": "Only the scheduling mechanism is reproduced. The fixture supplies empty cache coverage; real Media3 cache locks, I/O contention, throughput and playback-stall impact are unmeasured. Retain as partially verified performance candidate.",
+      "observations": {
+        "old_head": 1310720,
+        "new_open_position": 209715200,
+        "head_after_reopen": 1310720,
+        "first_worker_request": 1310720,
+        "head_after_threshold": 209977344
+      }
+    },
+    "AUD-010": {
+      "classification": "defect_reproduced",
+      "title": "One sampler exception latches an error after successful observations recover",
+      "verification": "The real source sampler accepted a good sample, received one injected timeout and then accepted a fresh later sample. Its state returned to fresh but timing_error stayed set; the real monitor still entered error. A healthy sequence kept playing; persistent timeouts and a genuine timeline discontinuity still failed.",
+      "limits": "The exception is injected within the freshness budget, not a measured physical IPC timeout. Source failure classification and actual driver behavior remain separate.",
+      "observations": [
+        {
+          "case": "single_timeout_then_success",
+          "sampler_state_before_monitor": "fresh",
+          "error_latched": true,
+          "latest_good_sequence": 2,
+          "state_after_monitor": "error"
+        },
+        {
+          "case": "healthy",
+          "sampler_state_before_monitor": "fresh",
+          "error_latched": false,
+          "latest_good_sequence": 3,
+          "state_after_monitor": "playing"
+        },
+        {
+          "case": "persistent_timeout",
+          "sampler_state_before_monitor": "failed",
+          "error_latched": true,
+          "latest_good_sequence": 1,
+          "state_after_monitor": "error"
+        },
+        {
+          "case": "discontinuity",
+          "sampler_state_before_monitor": "failed",
+          "error_latched": true,
+          "latest_good_sequence": 1,
+          "state_after_monitor": "error"
+        }
+      ]
+    },
+    "AUD-011": {
+      "classification": "defect_reproduced",
+      "title": "mpv IPC failure can prevent the independent TV pause",
+      "verification": "In baseline, servo and audio-clock modes, injecting an mpv time-pos error or pause-command error caused the real fail/pause path to omit the TV pause. In all three no-IPC-failure controls, TV pause was attempted.",
+      "limits": "The TV endpoint was independently healthy and synthetic. The result verifies exception short-circuiting, not any physical device failure.",
+      "observations": [
+        {
+          "mode": "baseline",
+          "fault": "position_query",
+          "state": "error",
+          "tv_pause_attempted": false
+        },
+        {
+          "mode": "baseline",
+          "fault": "pause_command",
+          "state": "error",
+          "tv_pause_attempted": false
+        },
+        {
+          "mode": "baseline",
+          "fault": "none",
+          "state": "error",
+          "tv_pause_attempted": true
+        },
+        {
+          "mode": "servo",
+          "fault": "position_query",
+          "state": "error",
+          "tv_pause_attempted": false
+        },
+        {
+          "mode": "servo",
+          "fault": "pause_command",
+          "state": "error",
+          "tv_pause_attempted": false
+        },
+        {
+          "mode": "servo",
+          "fault": "none",
+          "state": "error",
+          "tv_pause_attempted": true
+        },
+        {
+          "mode": "audio-clock",
+          "fault": "position_query",
+          "state": "error",
+          "tv_pause_attempted": false
+        },
+        {
+          "mode": "audio-clock",
+          "fault": "pause_command",
+          "state": "error",
+          "tv_pause_attempted": false
+        },
+        {
+          "mode": "audio-clock",
+          "fault": "none",
+          "state": "error",
+          "tv_pause_attempted": true
+        }
+      ]
+    },
+    "AUD-012": {
+      "classification": "documented_limitation",
+      "title": "UDP negotiation has no automatic TCP fallback when UDP is unreachable",
+      "verification": "The current TimingClient sent 34 UDP hellos to a loopback black-hole endpoint over nine seconds, reached no ready state and made zero TCP connection attempts. An explicit authenticated-token TCP timing connection to the same fixture became ready.",
+      "limits": "Behavior confirmed, but this is the existing documented fail-closed transport limitation in datagram-timing.md, not proof of a regression. Treat fallback as a compatibility/design enhancement; no authorization checks were weakened.",
+      "observations": {
+        "udp_hello_count_9s": 34,
+        "udp_ready": 0,
+        "automatic_tcp_attempts": 0,
+        "explicit_tcp_ready": true
+      }
+    },
+    "AUD-013": {
+      "classification": "defect_reproduced",
+      "title": "Unbounded status metadata can exceed the host control-frame limit",
+      "verification": "The current TV status and subtitle-serialization method bodies were executed with inert device fields and a Gson-backed JSON API substitute. A 250-track fixture with 160-byte ASCII labels generated 70,940 JSON bytes; the actual host control handler closed it as oversized_frame. A 65,535-byte JSON payload plus newline was accepted; 65,536 payload bytes plus newline was rejected.",
+      "limits": "The Android Activity/player were not launched; the method bodies were extracted unchanged. Native JSON formatting and real catalogs can differ. The receiver limit is 65,536 wire bytes including newline, so its maximum JSON payload is 65,535 bytes.",
+      "observations": {
+        "generator": {
+          "tracks": 250,
+          "label_bytes": 160,
+          "encoded_status_bytes": 70940
+        },
+        "receiver_cases": [
+          {
+            "case": "small",
+            "payload_bytes": 256,
+            "wire_frame_bytes": 257,
+            "closed": false,
+            "close_reason": "",
+            "status_accepted": true
+          },
+          {
+            "case": "max_payload",
+            "payload_bytes": 65535,
+            "wire_frame_bytes": 65536,
+            "closed": false,
+            "close_reason": "",
+            "status_accepted": true
+          },
+          {
+            "case": "one_byte_over",
+            "payload_bytes": 65536,
+            "wire_frame_bytes": 65537,
+            "closed": true,
+            "close_reason": "oversized_frame",
+            "status_accepted": false
+          },
+          {
+            "case": "generated_250_tracks",
+            "payload_bytes": 70940,
+            "wire_frame_bytes": 70941,
+            "closed": true,
+            "close_reason": "oversized_frame",
+            "status_accepted": false
+          }
+        ]
+      }
+    },
+    "AUD-014": {
+      "classification": "defect_reproduced",
+      "title": "Diagnostic write failure can interrupt playback and escape the monitor",
+      "verification": "Injected CSV write and flush errors made the real monitor pause healthy fake playback. Combining CSV failure with events.log append failure let OSError escape monitor(). A separate real monitor thread exited on that double failure while its stop event remained unset. A healthy diagnostic-I/O control remained playing.",
+      "limits": "Filesystem failure was injected; no disk was filled or permissions changed. Worker termination was verified on an isolated real thread, not inferred from physical-device logs.",
+      "observations": [
+        {
+          "fault": "csv_write",
+          "state": "error",
+          "audio_paused": true,
+          "monitor_exception_escaped": []
+        },
+        {
+          "fault": "csv_flush",
+          "state": "error",
+          "audio_paused": true,
+          "monitor_exception_escaped": []
+        },
+        {
+          "fault": "csv_and_event_log",
+          "state": "error",
+          "audio_paused": true,
+          "monitor_exception_escaped": [
+            "OSError"
+          ]
+        },
+        {
+          "fault": "none",
+          "state": "playing",
+          "audio_paused": false,
+          "monitor_exception_escaped": []
+        },
+        {
+          "fault": "csv_and_event_log_real_thread",
+          "worker_alive": false,
+          "stop_requested": false,
+          "state": "error",
+          "escaped": [
+            "OSError"
+          ]
+        }
+      ]
+    }
+  },
+  "git_blob_sha256": {
+    "host/server.py": "4f0303b90090c2217223d61e98accffd536d2a83f8ffbdc82f6fc71b082909fb",
+    "host/mpv.py": "f7f9325f6a1a2b8a1fdffd7e149d763be6fb2559e11ac6ad8ddaa060a7c90ab1",
+    "host/desktop.py": "e0e2d8e33bc59f8cad255a7b0e2d379d106b231a206e706303a4231110029830",
+    "host/timing.py": "4d9499c1030c24560b66cd1a8f4fe4525d6fef61a90a8f33d1cf1973a23e1ddb",
+    "host/datagram_timing.py": "45f472de1ab90f6fc28497557ce4acba2bb3fe009d7139ce403db12711f9eb65",
+    "android/app/src/main/java/dev/dualtheater/tv/ControlClient.java": "8fd3cfa618e54d106c6fb0783c4f23f21a8a5dfc3da6229ed229a1019050b803",
+    "android/app/src/main/java/dev/dualtheater/tv/TimingClient.java": "799e60d5286d602dc8d1f6e788066ea7fba12193242e0055057a3b260615c3df",
+    "android/app/src/main/java/dev/dualtheater/tv/RemoteTimeline.java": "848d1d702a96fb5da79071478857bfe68dcf7c94ee9932e9eed4d27f722089d2",
+    "android/app/src/main/java/dev/dualtheater/tv/ReadAheadCache.java": "5ed5b846839495e51f1c53b81e37f7ffcb9604d9a51bb3cad5329527451f24d5",
+    "android/app/src/main/java/dev/dualtheater/tv/ReadAheadWindow.java": "736c52124830c28ebc4eb13146930657b36a6e3f370152bd11e031f64f4cad2e",
+    "android/app/src/main/java/dev/dualtheater/tv/BufferedByteReader.java": "3bbfbe83b90fa49495f90b0119a006ac943f28123c4581cb0328691a4525cb10",
+    "android/app/src/main/java/dev/dualtheater/tv/MainActivity.java": "4a0e6a525badbc0aa98fd02bdce3c0fc24c71c730edc274652439094caf6192a",
+    "android/app/src/main/java/dev/dualtheater/tv/FrameObservations.java": "cf8c963f55ec3ae13614bbc82fc9cc4293703b11370f45b6ea6d3ab62d22c8b6"
+  }
+}
