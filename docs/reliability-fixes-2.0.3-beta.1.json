@@ -1,0 +1,45 @@
+{
+  "version": "2.0.3-beta.1",
+  "branch": "experiment/cache-timing-fallback",
+  "implementation_commit": "a70c3d218fab63175accb3487c40751b2682a1b3",
+  "derived_from_parent": "8832ecf3c00b369956feedd0f44dc0ddca560862",
+  "parent_resolution": "reliability-fixes-2.0.2-beta.1.json",
+  "software_checks": {
+    "host_tests": 176,
+    "host_skips": 0,
+    "real_mpv_output": "null",
+    "tv_jvm_tests": 52,
+    "android_assembly": "passed",
+    "android_lint": "passed",
+    "portable_terminal_core": "passed",
+    "cache_actual_controller_fixture": "passed",
+    "cache_old_parent_negative_control": "failed as expected"
+  },
+  "resolutions": {
+    "AUD-009": {
+      "scope": "logical head/worker scheduling on extractor reopen",
+      "tests": [
+        "tools_src/verify_cache_controller.py"
+      ],
+      "limits": "inert Android/cache APIs; real contention and playback improvement unmeasured"
+    },
+    "AUD-012": {
+      "scope": "capability-negotiated session-authorized dedicated TCP fallback after bounded UDP setup",
+      "tests": [
+        "TimingFallbackTests",
+        "TimingClientTest"
+      ],
+      "limits": "loopback counterpart tests; no combined hardware playback acceptance; no live transport migration or automatic resume"
+    }
+  },
+  "preserved": [
+    "parent branch",
+    "main",
+    "published releases and locked bundles",
+    "private calibration",
+    "original media bytes",
+    "1x compressed audio",
+    "active video clock/slew kernels"
+  ],
+  "hardware_validation": "pending; no GUI, ADB, HDMI or throughput tests performed"
+}

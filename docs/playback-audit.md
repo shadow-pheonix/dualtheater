@@ -177,7 +177,7 @@ Software resolution commit **`1013584`**, branch **`fix/playback-reliability`**,
 | AUD-014 | OptionalLoggingTests (disk failure and bounded queue/backpressure) |
 
 
-Experimental child **2.0.3-beta.1**, derived from parent `8832ecf`, also software-resolves these scoped records. Final checks: 176 host tests without skips, 52 TV JVM tests, Android assembly/lint, cache controller proof and portable terminal-only core verification passed:
+Experimental child **2.0.3-beta.1**, implementation `a70c3d2` and [resolution record](reliability-fixes-2.0.3-beta.1.json), derived from parent `8832ecf`, also software-resolves these scoped records. Final checks: 176 host tests without skips, 52 TV JVM tests, Android assembly/lint, cache controller proof and portable terminal-only core verification passed:
 
 | ID | Correction and regression |
 | --- | --- |

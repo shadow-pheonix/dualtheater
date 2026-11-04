@@ -126,4 +126,3 @@ class TimingFallbackTests(unittest.TestCase):
             self.assertEqual(sock.recv(10), b'')
         self.assertIs(peer.timing, old)
         self.assertFalse(old.closed)
-
