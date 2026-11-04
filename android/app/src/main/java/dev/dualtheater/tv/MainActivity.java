@@ -737,11 +737,14 @@ public final class MainActivity extends Activity {
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() != C.TRACK_TYPE_TEXT) continue;
             for (int i = 0; i < group.length; i++) {
-                Format f = group.getTrackFormat(i); String id = textGroup + ":" + i;
+                String id = textGroup + ":" + i;
                 boolean isSelected = group.isTrackSelected(i); if (isSelected) selected = id;
-                String language = f.language == null || f.language.equals("und") ? "" : f.language;
-                String codec = f.sampleMimeType == null ? "" : f.sampleMimeType;
+                if (tracks.length() >= 128 && !isSelected) continue;
+                Format f = group.getTrackFormat(i);
+                String language = StatusPayload.clip(f.language == null || f.language.equals("und") ? "" : f.language, 35);
+                String codec = StatusPayload.clip(f.sampleMimeType, 64);
                 String label = f.label == null || f.label.isEmpty() ? (language.isEmpty() ? "Subtitle " + (tracks.length() + 1) : language) : f.label;
+                label = StatusPayload.clip(label, 120);
                 try { tracks.put(new JSONObject().put("id", id).put("label", label).put("language", language)
                     .put("codec", codec).put("selected", isSelected).put("supported", group.isTrackSupported(i))
                     .put("format_label", codec)); } catch (JSONException ignored) {}
@@ -1220,7 +1223,7 @@ public final class MainActivity extends Activity {
                 .put("epoch", rendered.epoch).put("sequence", rendered.sequence)
                 .put("position_ms", rendered.mediaUs / 1000.0).put("release_ns", rendered.releaseNs)
                 .put("rendered_ns", rendered.renderedNs).put("received_ns", rendered.receivedNs));
-            client.send(s);
+            client.send(StatusPayload.bound(s));
         } catch (JSONException ignored) {}
     }
 

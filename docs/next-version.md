@@ -1,6 +1,6 @@
 # Version 2.0 operating guide
 
-`main` builds **2.0.0**, promoted from the finalized local beta.4 candidate at the user's request. Existing package identities, private profiles and locked releases are preserved. Update Windows and TV together. Existing phone clients remain protocol-compatible.
+Published **2.0.0** was promoted from the finalized local beta.4 candidate. This development branch builds **2.0.2-beta.1**, with [separate reliability fixes and software validation](reliability-branches.md). Existing package identities, private profiles and locked releases are preserved. Update Windows and TV together. Existing phone clients remain protocol-compatible.
 
 At the user's request, only the **post-1.0 drift changes** have been reverted. Shared transport and the TV renderer-clock algorithm use the v1.0 baseline, with explicit availability/lifecycle/start-verification exceptions described in [timing baseline](drift-control.md). V1.0 already includes synchronized clocks and bounded video-side correction; those original mechanisms remain. The saved calibration and untouched 1x audio passthrough are retained. The independent 64-bit transport-position conversion fix is retained as well.
 

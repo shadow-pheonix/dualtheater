@@ -7,8 +7,8 @@ android {
         applicationId 'dev.dualtheater.tv.robustsync'
         minSdk 26
         targetSdk 34
-        versionCode 20
-        versionName '2.0.1-beta.1'
+        versionCode 21
+        versionName '2.0.2-beta.1'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -20,4 +20,5 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.9.0'
     implementation 'androidx.media3:media3-ui:1.9.0'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

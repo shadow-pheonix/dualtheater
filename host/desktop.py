@@ -2,6 +2,7 @@
 import argparse
 import ctypes
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -255,6 +256,7 @@ class DesktopWindow:
         ttk.Spinbox(row, from_=-2000, to=2000, increment=10, textvariable=self.offset, width=10).pack(side='left', padx=8)
         self.offset_button = ttk.Button(row, text='Save and resynchronize', command=self.save_offset)
         self.offset_button.pack(side='left')
+        self.note(self.options, 'The field follows applied calibration until edited. Saving an edited manual value overrides the active correction shown below.')
         self.note(self.options, 'The timing below is estimated from device APIs; it does not prove physical lip-sync. Confirm the TV HDR mode and receiver Atmos indication independently.')
         self.timing = ttk.Label(self.options, text='No timing samples yet.')
         self.timing.pack(anchor='w', pady=5)
@@ -345,8 +347,11 @@ class DesktopWindow:
     def seek_exact(self):
         try:
             seconds = float(self.seek_seconds.get())
+            duration = self.status.get('duration_ms', 0) / 1000
+            if not math.isfinite(seconds) or seconds < 0 or duration > 0 and seconds > max(0, duration - .1):
+                raise ValueError()
         except ValueError:
-            self.error_text.set('Enter the seek time in seconds, for example 600 for 10:00.')
+            self.error_text.set('Enter a finite seek time within the movie, in seconds (600 = 10:00).')
             return
         self.action('seek', seconds=seconds)
 
@@ -511,9 +516,17 @@ class DesktopWindow:
             self.timeline.configure(to=max(1, duration/1000))
             self.timeline.set(position/1000)
         self.time_text.set(f'{format_time(position)} / {format_time(duration)}')
-        if not self.offset_loaded:
-            self.offset.set(str(round(value['video_lead_ms'])))
-            self.offset_loaded = True
+        previous = getattr(self, 'offset_synced_text', self.offset.get())
+        draft = self.offset.get()
+        active = value['video_lead_ms']
+        try:
+            matches_active = float(draft) == active
+        except (ValueError, TypeError):
+            matches_active = False
+        if not self.offset_loaded or draft == previous or matches_active:
+            self.offset_synced_text = format(active, '.12g')
+            self.offset.set(self.offset_synced_text)
+        self.offset_loaded = True
         drift, rtt = value['drift_ms'], value['clock_rtt_ms']
         profile_note = ' · Saved adjustment context changed; verify it' if value.get('offset_profile') == 'context_changed' else ''
         self.timing.configure(text=f"Estimated drift: {'—' if drift is None else f'{drift:.1f} ms'} · Clock RTT: {'—' if rtt is None else f'{rtt:.1f} ms'}" + profile_note)

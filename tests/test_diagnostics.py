@@ -331,11 +331,13 @@ class DiagnosticProtocolTests(unittest.TestCase):
                 self.assertNotIn(directory, json.dumps(report))
                 self.assertEqual(report['telemetry']['status'], 'fresh')
                 app.action({'action': 'pause'})
+                paused_epoch = app.epoch
                 with self.assertRaises(ValueError):
                     app.action({'action': 'seek', 'seconds': -1})
                 report = app.diagnostic_report()
                 self.assertEqual(report['operations']['seek']['failures'], 1)
-                self.assertEqual(report['errors'], 1)
+                self.assertEqual(report['errors'], 0)
+                self.assertEqual((app.state, app.epoch), ('paused', paused_epoch))
                 tv.close()
                 wait(lambda: app.diagnostic_report()['disconnects'] == 1)
                 self.assertEqual(app.diagnostic_report()['telemetry']['status'], 'disconnected')

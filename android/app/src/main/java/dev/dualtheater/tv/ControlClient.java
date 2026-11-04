@@ -6,6 +6,7 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /** One authenticated connection. Bounded output; no silent replay after disconnect. */
 final class ControlClient implements AutoCloseable {
@@ -16,17 +17,30 @@ final class ControlClient implements AutoCloseable {
     private final Listener listener;
     private final BlockingQueue<String> outbound = new ArrayBlockingQueue<>(64);
     private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final Object lifecycle = new Object();
+    private final Supplier<Socket> socketFactory;
+    private boolean started;
     private volatile Socket socket;
     private Thread readerThread, writerThread;
 
-    ControlClient(Listener listener) { this.listener = listener; }
+    ControlClient(Listener listener) { this(listener, Socket::new); }
+    ControlClient(Listener listener, Supplier<Socket> socketFactory) {
+        this.listener = listener; this.socketFactory = socketFactory;
+    }
 
     void connect(String host, int port, String token, String clientId) {
+        synchronized (lifecycle) {
+            if (started || closed.get()) return;
+            started = true;
+        }
         readerThread = new Thread(() -> {
-            try {
-                Socket s = new Socket();
-                socket = s;
+            try (Socket s = socketFactory.get()) {
+                synchronized (lifecycle) {
+                    if (closed.get()) return;
+                    socket = s;
+                }
                 s.connect(new InetSocketAddress(host, port), 5000);
+                if (closed.get()) return;
                 s.setTcpNoDelay(true);
                 s.setSoTimeout(4000);
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
@@ -65,17 +79,24 @@ final class ControlClient implements AutoCloseable {
                     } else listener.onMessage(msg);
                 }
             } catch (Exception e) { disconnect(e.getMessage()); }
+            finally { disconnect("Host disconnected"); }
         }, "dualtheater-reader");
         readerThread.start();
     }
 
     void send(JSONObject message) {
-        if (!closed.get() && !outbound.offer(message.toString())) disconnect("Control output queue full");
+        String line = message.toString();
+        if (line.getBytes(StandardCharsets.UTF_8).length > StatusPayload.MAX_BYTES) {
+            disconnect("Oversized control output"); return;
+        }
+        if (!closed.get() && !outbound.offer(line)) disconnect("Control output queue full");
     }
 
     private void disconnect(String reason) {
         if (closed.compareAndSet(false, true)) {
-            try { if (socket != null) socket.close(); } catch (IOException ignored) {}
+            synchronized (lifecycle) {
+                try { if (socket != null) socket.close(); } catch (IOException ignored) {}
+            }
             if (writerThread != null) writerThread.interrupt();
             listener.onDisconnected(reason == null ? "Disconnected" : reason);
         }

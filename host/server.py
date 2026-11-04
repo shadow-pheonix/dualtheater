@@ -30,8 +30,14 @@ from .diagnostics import SessionDiagnostics, receiver_report
 from .calibration import CalibrationService
 from .timing import AffineClock, AudioTimeline, AdaptiveServo, TimingUnavailable
 from .datagram_timing import DatagramTimingService
+from .session_log import SessionLog
+from .end_tail import EndTail
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+class TrackSelectionRejected(ValueError):
+    """The requested choice failed, but the previous working track was restored."""
 
 
 def ns():
@@ -39,6 +45,8 @@ def ns():
 
 
 def finite(value, low, high):
+    if isinstance(value, bool):
+        raise ValueError('A finite number is required')
     value = float(value)
     if not math.isfinite(value) or not low <= value <= high:
         raise ValueError(f'Value must be between {low} and {high}')
@@ -49,6 +57,8 @@ def safe_client_error(message):
     """Return bounded guidance without leaking host paths or endpoint details."""
     text = str(message or '').lower()
     if not text: return ''
+    if 'previous track restored' in text:
+        return 'Requested audio track is unavailable. Previous track restored.'
     if 'movie changed' in text or 'media generation' in text or 'epoch changed' in text:
         return 'Movie changed. Reopen playback options and try again.'
     if 'subtitle' in text or 'text track' in text:
@@ -175,6 +185,7 @@ class Coordinator:
         self.ui_token = secrets.token_urlsafe(24)
         self.media_token = secrets.token_urlsafe(24)
         self.media_lock = threading.RLock()
+        self.peer_lock = threading.Lock()
         self.peer = self.mpv = self.media = None
         self.datagram_timing = None
         self.epoch = 0
@@ -224,6 +235,7 @@ class Coordinator:
         self.last_frame_key = None
         self.last_frame_advance_ns = 0
         self.started_ns = 0
+        self.end_drain = None
         self.diagnostics = SessionDiagnostics()
         self.calibration = CalibrationService(self, ROOT / 'calibration-phone-SDR-TrueHD.mkv')
         self.recoveries = deque()
@@ -233,19 +245,13 @@ class Coordinator:
         self.remote_queue = queue.Queue(maxsize=8)
         self.logs = deque(maxlen=40)
         self.log_dir = self.data_dir / 'logs' / datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.csv_file = (self.log_dir / 'timing.csv').open('w', newline='', encoding='utf-8')
-        self.csv = csv.writer(self.csv_file)
-        self.csv.writerow(['host_ns', 'epoch', 'audio_ms', 'video_ms', 'error_ms', 'video_speed',
-                           'clock_rtt_ms', 'ipc_uncertainty_ms'])
+        self.session_log = SessionLog(self.log_dir)
+        self.csv_file = self.csv = self.session_log
 
     def log(self, text):
         line = datetime.now().strftime('%H:%M:%S') + ' ' + str(text)
         self.logs.append(line)
-        with (self.log_dir / 'events.log').open('a', encoding='utf-8') as f:
-            f.write(line + '\n')
-        if sys.stdout is not None:
-            print(line, flush=True)
+        self.session_log.event(line)
 
     def snapshot(self):
         p = self.peer
@@ -334,7 +340,7 @@ class Coordinator:
         source = self.source_timing
         report['sync']['source_sampler'] = {
             'state': vocabulary(source.get('state'),
-                ('fresh', 'sample_unavailable', 'input_uncertain', 'fit_uncertain', 'clock_uncertain', 'failed')),
+                ('fresh', 'terminal_tail', 'sample_unavailable', 'input_uncertain', 'fit_uncertain', 'clock_uncertain', 'failed')),
             'input_uncertainty_ms': number(source.get('input_uncertainty_ms'), 0),
             'fit_uncertainty_ms': number(source.get('fit_uncertainty_ms'), 0),
             'consecutive_rejections': number(source.get('consecutive_rejections'), 0),
@@ -383,6 +389,7 @@ class Coordinator:
         report['receiver'] = receiver_report(self.receiver_observations)
         report['last_failure'] = self.last_failure
         report['last_recovery'] = self.last_recovery
+        report['logging'] = self.session_log.metrics()
         return report
 
     def profile_context(self):
@@ -409,23 +416,54 @@ class Coordinator:
             raise RuntimeError('TV telemetry is stale')
         return self.peer
 
+    def claim_tv(self, sock, reader, hello):
+        # No network write or operation-lock wait while reserving the slot.
+        with self.peer_lock:
+            if self.peer and not self.peer.closed:
+                return None
+            peer = Peer(sock, reader)
+            peer.client_protocol = 1 if hello.get('client_protocol') == 1 else 0
+            peer.remote_controls = hello.get('remote_controls') is True
+            peer.timing_protocol = hello.get('timing_protocol') == 2
+            peer.timing_datagrams = (hello.get('timing_datagrams') is True
+                and self.datagram_timing is not None and self.sync_mode != 'baseline')
+            if self.sync_mode != 'baseline':
+                peer.clock = AffineClock()
+            self.peer = peer
+            return peer
+
     def pause_both(self, reason='paused'):
+        latest = self.latest_anchor or self.audio_sample
         self.audio_running.clear()
         self.latest_anchor = None
         self.delivered_anchor = None
+        self.end_drain = None
         self.epoch += 1
+        errors = []
         if self.mpv:
             if self.state == 'playing':
-                self.anchor_ms = max(0, self.mpv.get('time-pos', 0) * 1000)
-            self.mpv.pause()
+                self.anchor_ms = max(0, (latest or {}).get('position_ms', self.anchor_ms) or 0)
+                try:
+                    self.anchor_ms = max(0, (self.mpv.get('time-pos', 0) or 0) * 1000)
+                except Exception as error:
+                    errors.append(error)
+            try:
+                self.mpv.pause()
+            except Exception as error:
+                errors.append(error)
         if self.peer and not self.peer.closed:
-            self.peer.request('pause', epoch=self.epoch)
+            try:
+                self.peer.request('pause', epoch=self.epoch)
+            except Exception as error:
+                errors.append(error)
         self.state = reason
         self.speed = 1.0
         self.servo.reset()
         self.last_frame_key = None
         self.last_frame_advance_ns = 0
         self.video_buffering_since_ns = 0
+        if errors:
+            raise errors[0]
 
     def fail(self, message):
         # A coordinated pause resets the TV clock. Preserve only the already
@@ -493,11 +531,18 @@ class Coordinator:
             time.sleep(.05)
         raise TimingUnavailable()
 
-    def load(self, path, aid='auto'):
-        self.tv()
+    @staticmethod
+    def validate_media(path):
+        if not isinstance(path, (str, os.PathLike)):
+            raise ValueError('Choose a movie file')
         media = Path(path).expanduser().resolve(strict=True)
         if not media.is_file() or media.suffix.lower() not in ('.mkv', '.mp4', '.m2ts', '.ts'):
             raise ValueError('Choose an MKV, MP4, M2TS or TS file')
+        return media
+
+    def load(self, path, aid='auto'):
+        self.tv()
+        media = self.validate_media(path)
         if not self.args.diagnostic and not self.args.device:
             raise ValueError('Choose an explicit WASAPI HDMI endpoint in Start.ps1 or --device')
         self.pause_both('loading')
@@ -534,6 +579,20 @@ class Coordinator:
         self.log('Prepared ' + media.name + '; audio=' + json.dumps(self.audio_info))
         self.log('Audio tracks: ' + json.dumps([t for t in tracks if t.get('type') == 'audio']))
         self.state = 'paused'
+
+    def validate_request(self, body):
+        action = body.get('action')
+        if action == 'load':
+            self.validate_media(body.get('path'))
+        elif action == 'offset':
+            finite(body.get('milliseconds'), -2000, 2000)
+        elif action == 'seek':
+            if not self.mpv:
+                raise ValueError('Load a file first')
+            duration = self.duration_ms / 1000 if self.duration_ms > 0 else (self.mpv.get('duration', 86400) or 0)
+            finite(body.get('seconds'), 0, max(0, duration - .1))
+            if not isinstance(body.get('play_after', self.state == 'playing'), bool):
+                raise ValueError('play_after must be a boolean')
 
     @staticmethod
     def make_track_catalog(tracks):
@@ -867,9 +926,20 @@ class Coordinator:
             if not mpv or not peer or peer.closed:
                 continue
             try:
+                tail = self.end_drain
+                if tail and tail.epoch == epoch and tail.peer is peer and tail.audio_done:
+                    model.sequence += 1
+                    anchor = tail.project(ns(), model.sequence)
+                    if self.epoch == epoch and self.end_drain is tail and self.audio_running.is_set():
+                        self.latest_anchor = anchor
+                        self.source_timing = {'state': 'terminal_tail', 'observed_ns': ns(),
+                            'fit_uncertainty_ms': anchor['uncertainty_ms'], 'consecutive_rejections': 0}
+                    continue
                 sample = mpv.timed_audio_sample()
                 if self.epoch != epoch or self.mpv is not mpv or not self.audio_running.is_set():
                     continue
+                if self.end_drain and self.end_drain.audio_done:
+                    continue  # EOF may have been observed during the IPC call.
                 anchor = model.add(sample)
                 if anchor is None:
                     rejected += 1
@@ -891,6 +961,13 @@ class Coordinator:
                     'input_uncertainty_ms': sample.get('uncertainty_ms'),
                     'fit_uncertainty_ms': anchor['uncertainty_ms'], 'consecutive_rejections': 0}
                 rejected = 0
+            except TimeoutError:
+                # A single missed IPC observation is not a timeline jump. The
+                # unchanged 750 ms last-good-source guard bounds any retry.
+                if self.epoch == epoch and self.audio_running.is_set():
+                    rejected += 1
+                    self.source_timing = {'state': 'sample_unavailable', 'observed_ns': ns(),
+                                          'consecutive_rejections': rejected}
             except Exception as e:
                 if self.epoch == epoch and self.audio_running.is_set():
                     self.source_timing = {'state': 'failed', 'observed_ns': ns()}
@@ -978,6 +1055,13 @@ class Coordinator:
         if action == 'pause':
             self.cancel.set()  # interrupts a pending start/prepare before taking the operation lock
         with self.op_lock:
+            # Reject input before taking ownership of the current playback.
+            # Failures after mutation still use the coordinated failure path.
+            try:
+                self.validate_request(body)
+            except (ValueError, TypeError, OSError):
+                self.diagnostics.operation(action, 0, True)
+                raise
             if action in ('track', 'subtitle'):
                 if 'epoch' in body or 'media_generation' in body:
                     if (type(body.get('epoch')) is not int or type(body.get('media_generation')) is not int
@@ -1038,20 +1122,7 @@ class Coordinator:
                     self.servo.reset()
                     self.log(f'Video lead set to {self.offset_ms:.1f} ms')
                 elif action == 'track':
-                    if not self.mpv:
-                        raise RuntimeError('Load a file first')
-                    playing = self.state == 'playing'
-                    position = self.mpv.get('time-pos', 0) * 1000
-                    self.pause_both()
-                    self.mpv.command('set_property', 'aid', str(int(body['aid'])))
-                    self.prepare(position)
-                    self.audio_info = self.mpv.verify()
-                    tracks = self.mpv.get('track-list', [])
-                    self.raw_track_list = list(tracks) if isinstance(tracks, list) else []
-                    self.track_catalog = self.make_track_catalog(tracks)
-                    self.audio_badge = self.badge_for(self.track_catalog)
-                    if playing:
-                        self.start(prepared=True)
+                    self.switch_track(str(int(body['aid'])))
                 elif action == 'subtitle':
                     sid = body.get('sid')
                     self.peer.request('subtitle', epoch=self.epoch, sid=sid)
@@ -1066,12 +1137,48 @@ class Coordinator:
                         self.start(prepared=True)
                 else:
                     raise ValueError('Unknown action')
+            except TrackSelectionRejected:
+                failed = True
+                raise
             except Exception as e:
                 failed = True
                 self.fail(str(e))
                 raise
             finally:
                 self.diagnostics.operation(action, (ns() - operation_started) / 1e6, failed)
+
+    def refresh_audio(self):
+        self.audio_info = self.mpv.verify()
+        tracks = self.mpv.get('track-list', [])
+        self.raw_track_list = list(tracks) if isinstance(tracks, list) else []
+        self.track_catalog = self.make_track_catalog(tracks)
+        self.audio_badge = self.badge_for(self.track_catalog)
+
+    def switch_track(self, aid):
+        if not self.mpv:
+            raise RuntimeError('Load a file first')
+        playing, previous = self.state == 'playing', self.mpv.get('aid')
+        position = (self.mpv.get('time-pos', 0) or 0) * 1000
+        self.pause_both()
+        try:
+            self.mpv.command('set_property', 'aid', aid)
+            self.prepare(position)
+            self.refresh_audio()
+            if playing:
+                self.start(prepared=True)
+        except Exception:
+            self.pause_both()
+            if previous is None:
+                raise RuntimeError('Previous audio selection is unavailable; reload the movie')
+            self.mpv.command('set_property', 'aid', str(previous))
+            # An explicit Pause/cancel must never be overridden by rollback.
+            if self.cancel.is_set() or self.stop.is_set():
+                raise RuntimeError('Track change cancelled; previous selection restored while paused')
+            self.prepare(position)
+            self.refresh_audio()
+            if playing:
+                self.start(prepared=True)
+            raise TrackSelectionRejected('Requested audio track is unavailable. Previous track restored.') from None
 
     def heartbeat(self):
         """TV control liveness cannot depend on optional phone/timing writes."""
@@ -1314,6 +1421,8 @@ class Coordinator:
                     raise RuntimeError(self.timing_error)
                 status_seen = p.status_seen
                 s = p.status
+                if status_seen is None or ns() - status_seen > 2_000_000_000:
+                    raise RuntimeError('TV video status is stale')
                 if s.get('epoch') != self.epoch:
                     raise RuntimeError('TV playback generation changed; reconnect and reload the movie')
                 if s.get('error'):
@@ -1324,9 +1433,7 @@ class Coordinator:
                 if self.sync_mode == 'audio-clock' and video_fresh and s.get('remote_clock', {}).get('state') in (
                         'audio_anchor_expired', 'audio_phase_jump'):
                     raise RuntimeError('TV remote audio clock lost confidence')
-                if s.get('state') == 'ended' or self.mpv.get('eof-reached', False):
-                    self.pause_both('ended')
-                    self.log('End of media')
+                if self.monitor_end(p, s):
                     continue
                 sample = self.mpv.audio_sample() if self.sync_mode == 'baseline' else self.latest_anchor
                 if sample is None or self.sync_mode != 'baseline' and ns() - sample['host_ns'] > 750_000_000:
@@ -1439,6 +1546,56 @@ class Coordinator:
             finally:
                 self.op_lock.release()
 
+    def monitor_end(self, peer, status):
+        audio_done = bool(self.mpv.get('eof-reached', False))
+        video_done = status.get('state') == 'ended'
+        if not (audio_done or video_done or self.end_drain):
+            return False
+        if audio_done and video_done:
+            self.pause_both('ended')
+            self.log('End of media')
+            return True
+        now = ns()
+        tail = self.end_drain
+        if tail is None:
+            audio_ms = self.mpv.get('time-pos')
+            audio_ms = audio_ms * 1000 if audio_ms is not None else (self.latest_anchor or self.audio_sample).get('position_ms', self.anchor_ms)
+            tail = EndTail(self.epoch, peer, now, self.duration_ms, audio_ms,
+                           status.get('position_ms', -1), self.playback_lead_ms)
+            if audio_done and self.sync_mode != 'baseline':
+                tail.audio_ended(self.latest_anchor, now)
+            elif audio_done:
+                tail.audio_done = True
+            self.end_drain = tail
+        if tail.epoch != self.epoch or tail.peer is not peer or now > tail.deadline_ns:
+            raise RuntimeError('Final media tail did not complete in time')
+        if audio_done and not tail.audio_done:
+            if self.sync_mode != 'baseline':
+                tail.audio_ended(self.latest_anchor, now)
+            else:
+                tail.audio_done = True
+        if not audio_done:
+            if self.mpv.get('paused-for-cache', False):
+                raise RuntimeError('Audio stalled during the final media tail')
+            if self.sync_mode != 'baseline':
+                anchor = self.latest_anchor
+                if not anchor or anchor.get('epoch') != self.epoch or now - anchor['host_ns'] > 750_000_000:
+                    raise RuntimeError('Source audio timeline expired')
+        if self.sync_mode != 'baseline':
+            delivered = self.delivered_anchor
+            if not delivered or delivered.get('epoch') != self.epoch or now - delivered['host_ns'] > 2_000_000_000:
+                raise RuntimeError('Audio timing delivery expired')
+        if not video_done and status.get('state') != 'buffering':
+            if not status.get('playing'):
+                raise RuntimeError('Video stopped during the final media tail')
+            frame = status.get('frame') or {}
+            key = (self.epoch, frame.get('sequence', frame.get('release_ns')))
+            if frame.get('valid') and key != self.last_frame_key:
+                self.last_frame_key, self.last_frame_advance_ns = key, now
+            elif now - (self.last_frame_advance_ns or self.started_ns) > 1_000_000_000:
+                raise RuntimeError('Video stalled during the final media tail')
+        return True
+
 
     def recover(self, position_ms, reason, kind='drift'):
         now = ns()
@@ -1502,18 +1659,10 @@ class ControlHandler(socketserver.StreamRequestHandler):
                 return
             if hello.get('role') not in (None, 'tv'):
                 return
-            if app.peer and not app.peer.closed:
+            peer = app.claim_tv(self.request, self.rfile, hello)
+            if peer is None:
                 self.wfile.write(b'{"error":"A TV is already connected"}\n')
                 return
-            peer = Peer(self.request, self.rfile)
-            peer.client_protocol = 1 if hello.get('client_protocol') == 1 else 0
-            peer.remote_controls = hello.get('remote_controls') is True
-            peer.timing_protocol = hello.get('timing_protocol') == 2
-            peer.timing_datagrams = (hello.get('timing_datagrams') is True
-                and app.datagram_timing is not None and app.sync_mode != 'baseline')
-            if app.sync_mode != 'baseline':
-                peer.clock = AffineClock()
-            app.peer = peer
             welcome = {'op': 'welcome', 'version': 1, 'remote_controls': True,
                        'host_id': app.pairings.host_id, 'host_name': app.host_name,
                        'sync_mode': app.sync_mode, 'timing_token': peer.timing_token}
