@@ -50,3 +50,7 @@ For host/JNI tests alone, `python tools_src/build_dovi.py --host-only` builds th
 [Third-party notices](../THIRD_PARTY_NOTICES.md) include the bridge/libdovi/Rust/JNI/NDK texts packaged in APK assets. [Kodi's decoder-profile correction](https://github.com/xbmc/xbmc/pull/24143) and [libdovi's conversion implementation](https://github.com/quietvoid/dovi_tool/blob/main/dolby_vision/src/rpu/dovi_rpu.rs) informed the design. Kodi GPL code and ExoPlayer HDR Utils are not bundled.
 
 Hardware acceptance must still verify the TV's own DV indication, native MEL versus converted FEL, HDR/color correctness, repeated seeks/pause-resume, lip-sync and a complete movie. No devices were contacted for this implementation.
+
+## Completed candidate
+
+Implementation/source snapshot **`b8ae62c`** has a separate TV-only APK/source/instructions/checksum bundle. The [validation record](dolby-vision-validation-2.0.4-beta.1.json) records 61 zero-skip TV JVM tests, five Rust tests, two existing Windows release-argument checks, assembly/lint and APK/native/source verification. These are local checks; source push skips automatic release publication. Physical TV HDR/color and full-movie synchronization acceptance remain pending. Windows and phone binaries were not rebuilt or replaced for this TV feature.

@@ -1,0 +1,46 @@
+{
+  "tv_version": "2.0.4-beta.1",
+  "tv_code": 23,
+  "implementation_commit": "b8ae62cab2603f9d866955cedf1b089cddbdf3e3",
+  "base_main": "23f4dbcf0996dcbd656250f447146ab24ab5adde",
+  "policy": {
+    "default": "automatic FEL-only",
+    "positive_p7_fel": "convert RPU to P8.1 and drop enhancement NALs",
+    "positive_p7_mel": "native format and samples unchanged",
+    "unclassified": "bounded probe then native",
+    "other_video": "native"
+  },
+  "software_checks": {
+    "tv_jvm_tests": 61,
+    "tv_jvm_skips": 0,
+    "rust_tests": 5,
+    "release_workflow_argument_tests": 2,
+    "android_assembly": "passed",
+    "android_lint": "passed",
+    "apk_signature": "passed",
+    "apk_zip_alignment_16k": "passed",
+    "native_elf_alignment_16k": "passed",
+    "native_builder_paths": "sanitized",
+    "packaged_abi_notice_hashes": "passed",
+    "source_zip_and_bundle_checksums": "passed"
+  },
+  "fixture_limits": "Original generated metadata and tiny containers with placeholder picture NALs; actual Media3 Matroska and host JNI execute, hardware video decoding does not.",
+  "preserved": [
+    "Windows implementation and version",
+    "phone implementation and version",
+    "original source file/HTTP bytes",
+    "compressed audio at 1x",
+    "active clock/timing/cache kernels",
+    "saved calibration",
+    "published releases",
+    "unmerged reliability comparison branches and locked bundles"
+  ],
+  "remaining": [
+    "physical TV P8.1 decoding and actual DV output",
+    "color and full movie behavior",
+    "repeated remote transport with physical output",
+    "physical lip-sync and picture-mode latency"
+  ],
+  "not_supported": "Full FEL residual reconstruction; enhancement information is discarded in compatibility mode.",
+  "candidate": "local TV-only APK; no release, GUI, ADB, HDMI or network-throughput test"
+}
