@@ -80,17 +80,22 @@ class DatagramTimingService:
             token = message.get('token') if isinstance(message, dict) else None
             if not isinstance(token, str) or not hmac.compare_digest(token, peer.timing_token):
                 return
-            link = peer.timing
-            if message.get('op') == 'hello' and message.get('version') == 3:
-                if not link or link.closed:
-                    link = DatagramTimingLink(self, peer, address)
-                    peer.clock = AffineClock()
-                    peer.timing = link
-                if isinstance(link, DatagramTimingLink) and link.address == address:
-                    link.send({'op': 'timing_ready', 'version': 3})
-            elif (message.get('op') == 'pong' and isinstance(link, DatagramTimingLink)
-                  and not link.closed and link.address == address):
-                link.pong(message, received)
+            with peer.timing_lock:
+                if self.app.peer is not peer or peer.closed or not peer.timing_datagrams:
+                    return
+                link = peer.timing
+                if message.get('op') == 'hello' and message.get('version') == 3:
+                    if not link or link.closed:
+                        if self.app.audio_running.is_set() or self.app.state in ('armed', 'playing'):
+                            return
+                        link = DatagramTimingLink(self, peer, address)
+                        peer.clock = AffineClock()
+                        peer.timing = link
+                    if isinstance(link, DatagramTimingLink) and link.address == address:
+                        link.send({'op': 'timing_ready', 'version': 3})
+                elif (message.get('op') == 'pong' and isinstance(link, DatagramTimingLink)
+                      and not link.closed and link.address == address):
+                    link.pong(message, received)
         except (ValueError, TypeError, UnicodeError, RecursionError, OSError):
             return
 
@@ -104,11 +109,14 @@ class DatagramTimingService:
                     self.receive(payload, address, time.perf_counter_ns())
                 peer = self.app.peer
                 link = peer.timing if peer else None
-                if (isinstance(link, DatagramTimingLink) and not link.closed
-                        and time.perf_counter_ns() - link.seen_ns > 3_000_000_000):
-                    link.close()
-                    if self.app.audio_running.is_set():
-                        self.app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
+                if peer:
+                    with peer.timing_lock:
+                        if (self.app.peer is peer and peer.timing is link
+                                and isinstance(link, DatagramTimingLink) and not link.closed
+                                and time.perf_counter_ns() - link.seen_ns > 3_000_000_000):
+                            link.close()
+                            if self.app.audio_running.is_set():
+                                self.app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
             except (OSError, ValueError):
                 if not self.closed.is_set():
                     self.closed.wait(.05)

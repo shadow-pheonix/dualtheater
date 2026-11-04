@@ -28,7 +28,7 @@ class TimedMpv(test_core.FakeMpv):
 
 
 class TimingTV:
-    def __init__(self, port, token, progress=True, datagrams=False):
+    def __init__(self, port, token, progress=True, datagrams=False, fallback=False):
         self.port, self.progress = port, progress
         self.sock = socket.create_connection(('127.0.0.1', port), timeout=5)
         self.reader = self.sock.makefile('rb')
@@ -43,7 +43,7 @@ class TimingTV:
         self.reported_error = ''; self.timing_error_only = False
         self.status_enabled = True; self.freeze_frames = False
         self.send({'op': 'hello', 'version': 1, 'token': token, 'timing_protocol': 2,
-                   'timing_datagrams': datagrams})
+                   'timing_datagrams': datagrams, 'timing_tcp_fallback': fallback})
         threading.Thread(target=self.read, daemon=True).start()
         threading.Thread(target=self.telemetry, daemon=True).start()
 

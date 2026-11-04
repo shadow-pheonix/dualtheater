@@ -47,7 +47,7 @@ final class ControlClient implements AutoCloseable {
                 JSONObject hello = new JSONObject().put("op", "hello").put("version", 1)
                     .put("client_protocol", 1)
                     .put("timing_protocol", 2)
-                    .put("timing_datagrams", true)
+                    .put("timing_datagrams", true).put("timing_tcp_fallback", true)
                     .put("remote_controls", true)
                     .put("client_id", clientId)
                     .put("token", token).put("device", android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);

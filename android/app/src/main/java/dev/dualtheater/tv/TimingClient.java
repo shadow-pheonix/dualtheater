@@ -10,6 +10,7 @@ import org.json.JSONObject;
 
 /** Dedicated, session-authorized timing stream. No player calls on this thread. */
 final class TimingClient implements AutoCloseable {
+    private final Object lifecycle = new Object();
     private volatile Socket socket;
     private volatile DatagramSocket datagram;
     private volatile boolean closed;
@@ -19,13 +20,22 @@ final class TimingClient implements AutoCloseable {
     }
     void connect(String host, int port, String token, RemoteTimeline timeline, Runnable ready, Runnable failed,
                  boolean useDatagrams) {
-        if (useDatagrams) { connectDatagrams(host, port, token, timeline, ready, failed); return; }
+        connect(host, port, token, timeline, ready, failed, useDatagrams, 0);
+    }
+    void connect(String host, int port, String token, RemoteTimeline timeline, Runnable ready, Runnable failed,
+                 boolean useDatagrams, int fallbackTcpPort) {
+        if (useDatagrams) {
+            connectDatagrams(host, port, token, timeline, ready, failed, fallbackTcpPort); return;
+        }
         new Thread(() -> {
             long retryMs = 250;
             while (!closed) {
-                Socket s = new Socket(); socket = s;
+                Socket s = new Socket();
                 try {
-                    if (closed) break;
+                    synchronized (lifecycle) {
+                        if (closed) break;
+                        socket = s;
+                    }
                     s.connect(new InetSocketAddress(host, port), 3000);
                     s.setTcpNoDelay(true); s.setSoTimeout(3000);
                     BufferedWriter out = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
@@ -72,20 +82,32 @@ final class TimingClient implements AutoCloseable {
     }
 
     private void connectDatagrams(String host, int port, String token, RemoteTimeline timeline,
-                                  Runnable ready, Runnable failed) {
+                                  Runnable ready, Runnable failed, int fallbackTcpPort) {
         new Thread(() -> {
             long retryMs = 250;
             while (!closed) {
                 DatagramSocket s = null;
+                boolean acknowledged = false, fallback = false;
                 try {
-                    s = new DatagramSocket(); datagram = s;
+                    s = new DatagramSocket();
+                    synchronized (lifecycle) {
+                        if (closed) break;
+                        datagram = s;
+                    }
                     s.connect(InetAddress.getByName(host), port);
                     s.setSoTimeout(250);
                     byte[] buffer = new byte[2049];
-                    boolean acknowledged = false;
+                    long deadline = System.nanoTime() + 2_500_000_000L, nextHello = 0;
                     while (!closed) {
-                        if (!acknowledged) sendDatagram(s, new JSONObject().put("op", "hello")
-                            .put("version", 3).put("token", token));
+                        // Check independently of receive timeouts: malformed or
+                        // unauthenticated traffic must not extend negotiation.
+                        if (!acknowledged && fallbackTcpPort > 0 && System.nanoTime() >= deadline) {
+                            fallback = true; break;
+                        }
+                        if (!acknowledged && System.nanoTime() >= nextHello) {
+                            sendDatagram(s, new JSONObject().put("op", "hello").put("version", 3).put("token", token));
+                            nextHello = System.nanoTime() + 250_000_000L;
+                        }
                         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                         try { s.receive(packet); }
                         catch (SocketTimeoutException timeout) {
@@ -106,7 +128,12 @@ final class TimingClient implements AutoCloseable {
                                 .put("t0", msg.getLong("t0")).put("t1", received);
                             reply.put("t2", System.nanoTime());
                             sendDatagram(s, reply);
-                        } else if ("anchor".equals(op)) {
+                            // A valid session-bound ping proves that the host
+                            // adopted UDP even if its explicit READY was lost.
+                            if (!acknowledged) {
+                                acknowledged = true; s.setSoTimeout(3000); retryMs = 250; ready.run();
+                            }
+                        } else if ("anchor".equals(op) && acknowledged) {
                             timeline.accept(msg.getLong("epoch"), msg.getLong("sequence"), msg.getLong("local_ns"),
                                 Math.round(msg.getDouble("position_ms") * 1000), msg.getDouble("rate"),
                                 msg.getDouble("uncertainty_ms"), received);
@@ -116,12 +143,21 @@ final class TimingClient implements AutoCloseable {
                     }
                 } catch (Exception error) {
                     if (!closed) {
-                        Log.w("DTTransport", "UDP timing disconnected: " + error.getClass().getSimpleName());
-                        failed.run();
+                        if (!acknowledged && fallbackTcpPort > 0) fallback = true;
+                        else {
+                            Log.w("DTTransport", "UDP timing disconnected: " + error.getClass().getSimpleName());
+                            failed.run();
+                        }
                     }
                 } finally {
                     if (s != null) s.close();
                     if (datagram == s) datagram = null;
+                }
+                if (fallback && !closed) {
+                    // Only setup switches transport. Established-link loss still
+                    // reports failure; the coordinator owns pause/recovery.
+                    connect(host, fallbackTcpPort, token, timeline, ready, failed, false);
+                    return;
                 }
                 try { if (cancelled.await(retryMs, TimeUnit.MILLISECONDS)) break; }
                 catch (InterruptedException error) { Thread.currentThread().interrupt(); break; }
@@ -136,11 +172,13 @@ final class TimingClient implements AutoCloseable {
         socket.send(new DatagramPacket(payload, payload.length));
     }
     @Override public void close() {
-        closed = true;
-        cancelled.countDown();
-        Socket s = socket;
-        try { if (s != null) s.close(); } catch (IOException ignored) {}
-        DatagramSocket d = datagram;
-        if (d != null) d.close();
+        synchronized (lifecycle) {
+            closed = true;
+            cancelled.countDown();
+            Socket s = socket;
+            try { if (s != null) s.close(); } catch (IOException ignored) {}
+            DatagramSocket d = datagram;
+            if (d != null) d.close();
+        }
     }
 }

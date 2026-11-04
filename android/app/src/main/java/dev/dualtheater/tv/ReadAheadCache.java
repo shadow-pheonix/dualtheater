@@ -209,11 +209,20 @@ final class ReadAheadCache implements AutoCloseable {
         // SimpleCache is process-scoped and intentionally survives Activity recreation.
     }
 
-    private void opening(String uri) {
+    private void opening(String uri, long position) {
         synchronized (lock) {
             if (closed || cache == null) return;
-            if (activeUri != null && !activeUri.equals(uri)) resetRequestLocked(uri, -1, C.LENGTH_UNSET);
-            else if (activeUri == null) resetRequestLocked(uri, -1, C.LENGTH_UNSET);
+            // An extractor reopen is a new logical byte position even when the
+            // URI is unchanged. Rebase before READY can wake the prefetch worker;
+            // do not wait for the first 256 KiB consumption notification.
+            boolean same = uri.equals(activeUri);
+            if (!same || ReadAheadWindow.isFarSeek(readHead, position)) {
+                resetRequestLocked(uri, position, same ? totalLength : C.LENGTH_UNSET);
+            } else {
+                readHead = position;
+                updateAheadLocked();
+                lock.notifyAll();
+            }
         }
     }
 
@@ -467,7 +476,7 @@ final class ReadAheadCache implements AutoCloseable {
         @Override public long open(DataSpec spec) throws IOException {
             dataSpec = spec; uri = spec.uri.toString(); bytesRead = 0; lastSignalBytes = -1;
             buffered.reset(0);
-            owner.opening(uri);
+            owner.opening(uri, spec.position);
             long started = owner.foregroundStarted();
             try { openedLength = delegate.open(spec); }
             finally { owner.foregroundFinished(started); }

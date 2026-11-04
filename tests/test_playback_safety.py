@@ -44,7 +44,7 @@ def playing(mode='audio-clock'):
                 app.peer.status.update(state='ready', seek_pending=False, position_ms=kw.get('position_ms', 0))
             return {'epoch': app.epoch}
         now = ns()
-        app.peer = SimpleNamespace(closed=False, seen=now, status_seen=now, request=request,
+        app.peer = SimpleNamespace(closed=False, seen=now, status_seen=now, request=request, timing_lock=threading.Lock(),
             clock=SimpleNamespace(best=lambda when: ClockEstimate(0, 1_000_000, when, uncertainty_ns=500_000)),
             status={'epoch':7, 'state':'ready', 'error':'', 'position_ms':45000, 'playing':True,
                 'seek_pending':False, 'speed':1, 'sample_ns':now,

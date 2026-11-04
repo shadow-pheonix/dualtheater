@@ -983,7 +983,8 @@ public final class MainActivity extends Activity {
                                 if (error.isEmpty() || error.equals(TIMING_ERROR)) error = TIMING_ERROR;
                                 status();
                             }
-                        }), useDatagrams);
+                        }), useDatagrams, msg.optBoolean("timing_tcp_fallback", false)
+                            ? Integer.parseInt(portInput.getText().toString()) : 0);
                 }
                 loading = false; seekPending = false; error = ""; decoderName = "";
                 coordinatorEpoch = -1; coordinatorState = "idle"; movieTitle = ""; movieDurationMs = 0;

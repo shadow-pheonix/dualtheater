@@ -2,7 +2,7 @@
 
 Last verified: **2026-11-04 (Asia/Calcutta)** against source `099dfe0` (playback implementation unchanged since `3c4945c`).
 
-**Branch resolution:** the twelve reproduced defect records are software-resolved on `fix/playback-reliability` in `1013584` / **2.0.2-beta.1**. The original reproductions below describe the pre-fix `099dfe0` source. Device validation remains pending. AUD-009 and AUD-012 are deferred to the experimental child branch. This is not proof of 14 independent bugs: AUD-007 extends AUD-002, and AUD-012 is a compatibility limitation rather than a newly discovered regression.
+**Branch resolution:** the twelve reproduced defect records are software-resolved on `fix/playback-reliability` in `1013584` / **2.0.2-beta.1**. The original reproductions below describe the pre-fix `099dfe0` source. Device validation remains pending. The experimental child `experiment/cache-timing-fallback` / **2.0.3-beta.1** additionally implements AUD-009 scheduling and AUD-012 bounded authenticated setup fallback. Real cache-performance impact and hardware acceptance remain unmeasured. This is not proof of 14 independent bugs: AUD-007 extends AUD-002, and AUD-012 is a compatibility limitation rather than a newly discovered regression.
 
 Evidence and scope are recorded in the [verification observations](audit-verification-2026-11-04.json). Tests used actual coordinator/transport code with fake media endpoints and temporary loopback services. TV controller code used explicitly stubbed Android/cache APIs; Activity serialization methods were extracted unchanged. No existing host, TV, phone, GUI or physical playback was accessed. The original delivery/scheduling cause behind the long-session anchor-expiry pause remains unproven.
 
@@ -18,10 +18,10 @@ Evidence and scope are recorded in the [verification observations](audit-verific
 | AUD-006 | Windows | P2 | Simultaneous TV handshakes can both claim the single-TV slot | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 | AUD-007 | Windows | P2 | Rejected load and offset requests can stop the current movie | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 | AUD-008 | Windows | P2 | Failed audio-track selection leaves no rollback to the working track | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
-| AUD-009 | TV | P3 | Same-URI seek can temporarily prefetch the previous byte position | Partially verified: scheduling only | Performance impact unmeasured |
+| AUD-009 | TV | P3 | Same-URI seek can temporarily prefetch the previous byte position | Partially verified: scheduling only | Child software correction; real impact unmeasured |
 | AUD-010 | Windows | P2 | One sampler exception latches an error after successful observations recover | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 | AUD-011 | Windows / TV | P2 | mpv IPC failure can prevent the independent TV pause | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
-| AUD-012 | Windows / TV | P2 | UDP negotiation has no automatic TCP fallback when UDP is unreachable | Verified documented limitation | Compatibility decision pending |
+| AUD-012 | Windows / TV | P2 | UDP negotiation has no automatic TCP fallback when UDP is unreachable | Verified documented limitation | Child setup fallback; hardware pending |
 | AUD-013 | TV / Windows | P2 | Unbounded status metadata can exceed the host control-frame limit | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 | AUD-014 | Windows | P3 | Diagnostic write failure can interrupt playback and escape the monitor | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 
@@ -176,23 +176,20 @@ Software resolution commit **`1013584`**, branch **`fix/playback-reliability`**,
 | AUD-013 | StatusPayloadTest (bounded Unicode catalogs, selected track, critical timing/positions) |
 | AUD-014 | OptionalLoggingTests (disk failure and bounded queue/backpressure) |
 
+
+Experimental child **2.0.3-beta.1**, derived from parent `8832ecf`, also software-resolves these scoped records. Final checks: 176 host tests without skips, 52 TV JVM tests, Android assembly/lint, cache controller proof and portable terminal-only core verification passed:
+
+| ID | Correction and regression |
+| --- | --- |
+| AUD-009 | Actual controller fixture verifies immediate same-URI head/worker rebase, backward/small reopen and unchanged patterned source bytes. The parent fails the same-URI assertion. Real contention/playback improvement remains unmeasured. |
+| AUD-012 | TimingFallbackTests plus TimingClientTest verify bounded blocked-UDP setup, authenticated TCP, cancellation, lost-ready UDP, late-packet retirement, legacy policy and no armed/live migration. Physical transport reliability remains pending. |
+
 ## Yet to be resolved
 
-
-
-
-
-
-
-
-
-- [ ] **AUD-009 (partially verified mechanism):** Measure real foreground/cache contention and playback impact before changing the reproduced old-head prefetch scheduling.
-
-
-
-- [ ] **AUD-012 (documented limitation):** Decide whether to retain the documented fail-closed UDP policy or add bounded authenticated TCP fallback; availability behavior is verified, not a new regression.
-
-
+- [ ] Hardware acceptance of both comparison builds: whole-movie continuity, physical lip-sync, repeated remote controls and track rollback/EOF behavior.
+- [ ] AUD-009 real disk/network contention and playback impact. The scheduling mechanism is fixed in the child; no performance claim follows from API-stub tests.
+- [ ] AUD-012 real network/device fallback and recovery. Software setup availability passes in isolation; established-link loss still uses the existing fail-closed policy.
+- [ ] Original long-session anchor-expiry root cause remains unproven; these changes are not proof that every reported interruption has been eliminated.
 
 **Validation boundaries:** the fresh verification used isolated fault injection, permissive scheduling barriers for the handshake race, synthetic catalogs and API stubs. It did not validate physical HDR/Atmos, real HDMI driver behavior, panel latency, actual Android scheduling incidence or whole-movie reliability. The new hardware endurance run remained interrupted when the user turned the TV off. Earlier user-reported continuous audio/in-sync dialogue is historical evidence, not a fresh hardware result.
 

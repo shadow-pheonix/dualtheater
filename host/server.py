@@ -29,7 +29,7 @@ from .discovery import DiscoveryServer, DISCOVERY_PORT
 from .diagnostics import SessionDiagnostics, receiver_report
 from .calibration import CalibrationService
 from .timing import AffineClock, AudioTimeline, AdaptiveServo, TimingUnavailable
-from .datagram_timing import DatagramTimingService
+from .datagram_timing import DatagramTimingService, DatagramTimingLink
 from .session_log import SessionLog
 from .end_tail import EndTail
 
@@ -91,6 +91,8 @@ class Peer:
         self.timing = None
         self.timing_protocol = False
         self.timing_datagrams = False
+        self.timing_fallback = False
+        self.timing_lock = threading.Lock()
         self.role = 'tv'
         self.client_protocol = 0
         self.last_client_id = 0
@@ -427,10 +429,33 @@ class Coordinator:
             peer.timing_protocol = hello.get('timing_protocol') == 2
             peer.timing_datagrams = (hello.get('timing_datagrams') is True
                 and self.datagram_timing is not None and self.sync_mode != 'baseline')
+            peer.timing_fallback = peer.timing_datagrams and hello.get('timing_tcp_fallback') is True
             if self.sync_mode != 'baseline':
                 peer.clock = AffineClock()
             self.peer = peer
             return peer
+
+    def claim_timing(self, peer, sock):
+        # Never share the control writer lock: sendall can block for seconds.
+        # UDP adoption and start reservation use this short, timing-only lock.
+        with peer.timing_lock:
+            if self.peer is not peer or peer.closed:
+                return None
+            current = peer.timing
+            if self.audio_running.is_set() or self.state in ('armed', 'playing'):
+                return None
+            if current and not current.closed:
+                if not isinstance(current, DatagramTimingLink) or not peer.timing_fallback:
+                    return None
+            if peer.timing_datagrams and not peer.timing_fallback:
+                return None
+            if current:
+                current.close()
+            peer.timing_datagrams = False  # Retire late UDP hellos for this session.
+            peer.clock = AffineClock()
+            link = TimingLink(sock)
+            peer.timing = link
+            return link
 
     def pause_both(self, reason='paused'):
         latest = self.latest_anchor or self.audio_sample
@@ -836,9 +861,13 @@ class Coordinator:
             self.prepare(self.anchor_ms)
         self.wait_for(lambda q: q.status.get('epoch') == self.epoch and q.status.get('state') == 'ready'
                       and not q.status.get('seek_pending', True), seconds=10)
-        clock = p.clock.best(ns())
-        if not clock or (self.sync_mode == 'baseline' and clock.rtt_ns > 30_000_000):
-            raise RuntimeError('Clock round-trip exceeds 30 ms; improve LAN connection')
+        with p.timing_lock:
+            clock = p.clock.best(ns())
+            if not clock or (self.sync_mode == 'baseline' and clock.rtt_ns > 30_000_000):
+                raise RuntimeError('Clock round-trip exceeds 30 ms; improve LAN connection')
+            if self.sync_mode != 'baseline' and clock.uncertainty_ns > 12_000_000:
+                raise RuntimeError('Clock uncertainty exceeds 12 ms; improve the LAN connection')
+            self.state = 'armed'
         # Offset is made with separate start deadlines, including at media time zero.
         # Positive lead starts video first; negative lead starts audio first.
         start_at = ns() + 1_000_000_000
@@ -847,14 +876,11 @@ class Coordinator:
         audio_at = start_at + round(max(0, self.offset_ms) * 1e6)
         arm = dict(epoch=self.epoch, host_ns=video_at, offset_ns=clock.offset_ns)
         if self.sync_mode != 'baseline':
-            if clock.uncertainty_ns > 12_000_000:
-                raise RuntimeError('Clock uncertainty exceeds 12 ms; improve the LAN connection')
             arm.update(video_ns=clock.remote(video_at), audio_ns=clock.remote(audio_at),
                        position_ms=self.anchor_ms, video_lead_ms=self.offset_ms)
         p.request('arm', **arm)
         if ns() > start_at - 300_000_000:
             raise RuntimeError('Start acknowledgement arrived too late; press Play again')
-        self.state = 'armed'
         self.drift_ms = None
         self.servo.reset()
         audio_started = False
@@ -1217,8 +1243,9 @@ class Coordinator:
                 except OSError as problem:
                     link.close()
                     self.log('Timing send failed: ' + type(problem).__name__)
-                    if self.peer is p and p.timing is link:
-                        self.timing_error = 'Dedicated timing connection lost; reconnect and reload'
+                    with p.timing_lock:
+                        if self.peer is p and p.timing is link:
+                            self.timing_error = 'Dedicated timing connection lost; reconnect and reload'
 
 
     def phone_heartbeat(self):
@@ -1667,7 +1694,8 @@ class ControlHandler(socketserver.StreamRequestHandler):
                        'host_id': app.pairings.host_id, 'host_name': app.host_name,
                        'sync_mode': app.sync_mode, 'timing_token': peer.timing_token}
             if peer.timing_datagrams:
-                welcome.update(timing_transport='udp', timing_udp_port=app.datagram_timing.port)
+                welcome.update(timing_transport='udp', timing_udp_port=app.datagram_timing.port,
+                               timing_tcp_fallback=peer.timing_fallback)
             if peer.client_protocol: welcome['client_protocol'] = 1
             if trusted_token:
                 welcome['trusted_token'] = trusted_token
@@ -1728,13 +1756,10 @@ class ControlHandler(socketserver.StreamRequestHandler):
             return
         # Only the accepted control session can authorize this stream. Pairing
         # credentials/codes cannot be used to open a free-standing timing role.
-        with peer.lock:
-            if peer.timing and not peer.timing.closed:
-                return
-            link = TimingLink(self.request)
-            peer.timing = link
-            clock = AffineClock()
-            peer.clock = clock
+        link = app.claim_timing(peer, self.request)
+        if link is None:
+            return
+        clock = peer.clock
         try:
             link.send({'op': 'timing_ready', 'version': 2})
             while not app.stop.is_set() and app.peer is peer and not peer.closed:
@@ -1761,8 +1786,9 @@ class ControlHandler(socketserver.StreamRequestHandler):
         finally:
             link.close()
             app.log('Timing connection closed: ' + reason)
-            if app.peer is peer and peer.timing is link and app.audio_running.is_set():
-                app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
+            with peer.timing_lock:
+                if app.peer is peer and peer.timing is link and app.audio_running.is_set():
+                    app.timing_error = 'Dedicated timing connection lost; reconnect and reload'
 
     def handle_calibration(self, trusted_token, client_protocol=False):
         app = self.server.app

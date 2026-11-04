@@ -20,7 +20,15 @@ Fresh software validation: **168 host tests without skips**, including real mpv 
 
 ## Experimental child branch
 
-The user requested `experiment/cache-timing-fallback` only after the reliability branch is complete and checked. That child branch will add cache reopen/read-head scheduling and bounded session-authorized UDP-to-dedicated-TCP fallback. These changes are not part of the reliability build above. Its guide and results will be updated when implementation is complete; it must remain a descendant comparison build, not a replacement of main or published stable assets.
+`experiment/cache-timing-fallback` was derived directly from completed parent **8832ecf**. It builds Windows/TV **2.0.3-beta.1** (TV22) and includes the parent fixes plus:
+
+- Cache scheduling rebases immediately on extractor opens, including same-URI forward/backward/small reopens. Far reopens retire the previous writer generation. The cache still stores original bytes with the existing budgets/throttling.
+- Matching clients try UDP setup for up to **2.5 seconds**, then negotiate a **separate authenticated TCP timing connection** if no usable UDP reply arrived. A valid session ping can establish UDP if READY was lost. Wrong-token traffic cannot extend negotiation. Update Windows and TV together; older hosts retain their existing policy.
+- No transport replacement while armed/playing or audio is running. Late UDP cannot replace TCP. Clock acquisition, source expiry, confidence, epochs, calibration and start/progress checks still apply. Established-link loss still faults; reconnecting cannot independently resume playback. No control-channel anchors were introduced.
+
+**Final child software checks:** 176 host tests without skips, 52 TV JVM tests, Android assembly/lint, cache controller proof and portable terminal-only core verification passed. The old-parent cache negative control fails at the same-URI assertion. No hardware or GUI automation ran.
+
+Cache scheduling and transport availability are software-testable; real cache contention, network reliability and physical lip-sync still require hardware acceptance. Compare this child separately against the reliability parent. Keep each EXE/APK pair in its own folder; the compatible phone 2.0.0 app is unchanged.
 
 ## Source operation
 

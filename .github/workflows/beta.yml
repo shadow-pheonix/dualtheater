@@ -51,6 +51,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Verify cache reopen scheduling without device I/O
+        run: python tools_src/verify_cache_controller.py
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
