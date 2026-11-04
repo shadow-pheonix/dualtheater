@@ -6,7 +6,7 @@
 
 A later long-session test encountered a timing-confidence pause. An **unreleased 2.0.1-beta.1 candidate** is being tested for brief timing-delivery gaps; the downloads below remain 2.0.0. See [current findings and validation](docs/context.md#current-release-instruction--2026-11-03). If playback stops with a timing-confidence error, let the connection stabilize and use the normal **Play** control to resume both devices together; persistent faults need diagnosis.
 
-The [Windows/TV playback audit](docs/playback-audit.md) records four additional reproduced issues still present in the candidate. Check the manual lead field before **Save and resynchronize** after phone calibration, and use valid exact-seek input. Connection cancellation and final track-tail handling also need follow-up fixes. Whole-movie validation remains incomplete.
+The [Windows/TV playback audit](docs/playback-audit.md) tracks four reproduced issues and ten additional unverified code-review candidates in Findings, Verified findings, Resolved, and Yet to be resolved. Check the manual lead field before **Save and resynchronize** after phone calibration, and use valid exact-seek input. Connection cancellation and final track-tail handling also need follow-up fixes. Whole-movie validation remains incomplete.
 
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 

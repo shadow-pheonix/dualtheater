@@ -1,10 +1,12 @@
 # DualTheater project context
 
-Last updated: 2026-11-03 (Asia/Calcutta).
+Last updated: 2026-11-04 (Asia/Calcutta).
 
 This is the shared handoff for Codex sessions. Read it before starting work, then inspect the current repository and applicable `AGENTS.md` instructions. **Keeping this file current is mandatory:** update it after meaningful milestones, decisions, tests or blockers, and before a substantive handoff or publication. See [the full update rules](../AGENTS.md).
 
 ## Current release instruction — 2026-11-03
+
+**Audit organization — 2026-11-04:** incorporated the two newer documentation reviews through `2bf751d` and organized [the audit tracker](playback-audit.md) into exactly four sections: Findings, Verified findings, Resolved, and Yet to be resolved. It now tracks AUD-001–AUD-014: four offline-reproduced defects, ten unverified code-review candidates, zero resolved records and fourteen pending records. AUD-007 extends AUD-002's validation root cause rather than establishing a separate independent defect. All original trigger, behavior, evidence and correction details are preserved; no candidate was promoted to verified. Update the tracker when evidence, fixes or validation change, keeping IDs and verification/resolution status consistent. The user's commit/push request applies to this documentation update; skip automatic release publication. Validation is documentation-only (section/ID/status consistency, evidence preservation, links and whitespace); no implementation, application tests, device checks or binaries change.
 
 **Latest instruction: commit and push first, then continue the audit.** The user initially requested a local-only main build, which was committed as `3c4945c`, then explicitly authorized pushing to GitHub. Push the correction and current handoff on `main`; a new binary release has not been requested. The existing main-push workflow automatically publishes releases, so the handoff commit uses `[skip ci]` to keep this source push from publishing the candidate. Separate 2.0.1-beta.1 artifacts are prepared locally. Phone code is unchanged at 2.0.0; no phone replacement is required. Preserve published 2.0.0 and all older artifacts.
 
