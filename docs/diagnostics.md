@@ -1,6 +1,8 @@
 # Playback diagnostics
 
-Diagnostics are included in version **2.0.0** on `main`. The historical 0.4.1 EXE/APK do not include them. No TV is required to run the host tests or export an empty session report.
+Diagnostics are included in published **2.0.0** and the development branches. The historical 0.4.1 EXE/APK do not include them. No TV is required to run the host tests or export an empty session report.
+
+The 2.0.2-beta.1 reliability branch writes optional event/CSV logs through a bounded worker queue. `logging.errors`, `logging.dropped` and `logging.pending` expose numeric write/backpressure observations without paths. A logging failure can omit records but does not stop playback supervision. Rejected seek/load/offset input counts as an operation failure while leaving the playback-error counter and current epoch unchanged. During a validated final audio-first tail, the source sampler reports `terminal_tail`; this explicitly denotes a bounded final-clock projection after audio playback ended, not another live HDMI timing observation.
 
 ## Native Windows app
 

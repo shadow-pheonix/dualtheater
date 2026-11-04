@@ -1,0 +1,46 @@
+{
+  "version": "2.0.2-beta.1",
+  "branch": "fix/playback-reliability",
+  "implementation_commit": "1013584e0b3e3a1489855aa14e5ac0149e0f8da9",
+  "resolved_ids": [
+    "AUD-001",
+    "AUD-002",
+    "AUD-003",
+    "AUD-004",
+    "AUD-005",
+    "AUD-006",
+    "AUD-007",
+    "AUD-008",
+    "AUD-010",
+    "AUD-011",
+    "AUD-013",
+    "AUD-014"
+  ],
+  "deferred_ids": [
+    "AUD-009",
+    "AUD-012"
+  ],
+  "checks": {
+    "full_host_tests": 168,
+    "full_host_skips": 0,
+    "additional_focused_tests": 2,
+    "tv_jvm_tests": 46,
+    "android_assembly_lint": "passed",
+    "portable_terminal_core": "passed",
+    "physical_hardware": "not tested"
+  },
+  "regression_coverage": {
+    "AUD-001": "DesktopSafetyTests.test_phone_update_refreshes_clean_field_preserves_precision_and_manual_draft",
+    "AUD-002": "PlaybackSafetyTests.test_invalid_load_seek_offset_preserve_playing_epoch_and_media",
+    "AUD-003": "ControlClientTest (cancellation before adoption, during connect, and EOF)",
+    "AUD-004": "LiveBarrierSafetyTests.test_both_signed_leads_drain_with_real_clock_sender_and_receiver; EOF early-end/deadline/confidence controls",
+    "AUD-005": "PlaybackSafetyTests.test_stale_status_cannot_hide_behind_fresh_baseline_pongs; brief-delay control",
+    "AUD-006": "SlotOwnershipTests.test_concurrent_authenticated_handshakes_have_exactly_one_owner",
+    "AUD-007": "PlaybackSafetyTests.test_invalid_load_seek_offset_preserve_playing_epoch_and_media; diagnostic rejection/state regression",
+    "AUD-008": "RollbackTests; LiveBarrierSafetyTests.test_failed_audio_choice_restarts_previous_track_with_real_timing_barrier",
+    "AUD-010": "PlaybackSafetyTests timeout/discontinuity and sustained-source-expiry cases",
+    "AUD-011": "PlaybackSafetyTests.test_pause_attempts_both_endpoints_when_either_mpv_call_fails (all modes)",
+    "AUD-013": "StatusPayloadTest (bounded Unicode catalogs, selected track, critical timing/positions)",
+    "AUD-014": "OptionalLoggingTests (disk failure and bounded queue/backpressure)"
+  }
+}

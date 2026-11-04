@@ -2,7 +2,7 @@
 
 Last verified: **2026-11-04 (Asia/Calcutta)** against source `099dfe0` (playback implementation unchanged since `3c4945c`).
 
-**All 14 records were evaluated offline:** 12 defect behaviors reproduced, one cache performance candidate partially verified at the scheduling-mechanism level, and one documented transport limitation confirmed. None is fixed. This is not proof of 14 independent bugs: AUD-007 extends AUD-002, and AUD-012 is a compatibility limitation rather than a newly discovered regression.
+**Branch resolution:** the twelve reproduced defect records are software-resolved on `fix/playback-reliability` in `1013584` / **2.0.2-beta.1**. The original reproductions below describe the pre-fix `099dfe0` source. Device validation remains pending. AUD-009 and AUD-012 are deferred to the experimental child branch. This is not proof of 14 independent bugs: AUD-007 extends AUD-002, and AUD-012 is a compatibility limitation rather than a newly discovered regression.
 
 Evidence and scope are recorded in the [verification observations](audit-verification-2026-11-04.json). Tests used actual coordinator/transport code with fake media endpoints and temporary loopback services. TV controller code used explicitly stubbed Android/cache APIs; Activity serialization methods were extracted unchanged. No existing host, TV, phone, GUI or physical playback was accessed. The original delivery/scheduling cause behind the long-session anchor-expiry pause remains unproven.
 
@@ -10,20 +10,20 @@ Evidence and scope are recorded in the [verification observations](audit-verific
 
 | ID | Client | Priority | Finding | Verification | Resolution |
 | --- | --- | --- | --- | --- | --- |
-| AUD-001 | Windows | P2 | Windows can overwrite phone calibration with a stale manual field | Reproduced offline | Yet to be resolved |
-| AUD-002 | Windows / coordinator | P2 | Invalid seek input interrupts valid playback | Reproduced offline | Yet to be resolved |
-| AUD-003 | TV | P2 | A cancelled TV connection can still open and leak its socket | Reproduced offline | Yet to be resolved |
-| AUD-004 | Windows / TV | P2 | The first endpoint reaching EOF truncates the other track | Reproduced offline | Yet to be resolved |
-| AUD-005 | Windows / TV | P2 | Baseline control traffic can hide indefinitely stale TV video status | Reproduced offline | Yet to be resolved |
-| AUD-006 | Windows | P2 | Simultaneous TV handshakes can both claim the single-TV slot | Reproduced offline | Yet to be resolved |
-| AUD-007 | Windows | P2 | Rejected load and offset requests can stop the current movie | Reproduced offline | Yet to be resolved |
-| AUD-008 | Windows | P2 | Failed audio-track selection leaves no rollback to the working track | Reproduced offline | Yet to be resolved |
+| AUD-001 | Windows | P2 | Windows can overwrite phone calibration with a stale manual field | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-002 | Windows / coordinator | P2 | Invalid seek input interrupts valid playback | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-003 | TV | P2 | A cancelled TV connection can still open and leak its socket | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-004 | Windows / TV | P2 | The first endpoint reaching EOF truncates the other track | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-005 | Windows / TV | P2 | Baseline control traffic can hide indefinitely stale TV video status | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-006 | Windows | P2 | Simultaneous TV handshakes can both claim the single-TV slot | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-007 | Windows | P2 | Rejected load and offset requests can stop the current movie | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-008 | Windows | P2 | Failed audio-track selection leaves no rollback to the working track | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 | AUD-009 | TV | P3 | Same-URI seek can temporarily prefetch the previous byte position | Partially verified: scheduling only | Performance impact unmeasured |
-| AUD-010 | Windows | P2 | One sampler exception latches an error after successful observations recover | Reproduced offline | Yet to be resolved |
-| AUD-011 | Windows / TV | P2 | mpv IPC failure can prevent the independent TV pause | Reproduced offline | Yet to be resolved |
+| AUD-010 | Windows | P2 | One sampler exception latches an error after successful observations recover | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-011 | Windows / TV | P2 | mpv IPC failure can prevent the independent TV pause | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 | AUD-012 | Windows / TV | P2 | UDP negotiation has no automatic TCP fallback when UDP is unreachable | Verified documented limitation | Compatibility decision pending |
-| AUD-013 | TV / Windows | P2 | Unbounded status metadata can exceed the host control-frame limit | Reproduced offline | Yet to be resolved |
-| AUD-014 | Windows | P3 | Diagnostic write failure can interrupt playback and escape the monitor | Reproduced offline | Yet to be resolved |
+| AUD-013 | TV / Windows | P2 | Unbounded status metadata can exceed the host control-frame limit | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
+| AUD-014 | Windows | P3 | Diagnostic write failure can interrupt playback and escape the monitor | Reproduced offline | Software-resolved: 1013584 / 2.0.2-beta.1 |
 
 Keep IDs stable and update this tracker whenever reproductions, fixes or validation change. Verification is separate from resolution. Candidates with only a reproduced mechanism stay here until their claimed impact is established. A confirmed documented limitation must not be presented as a newly proved defect. Record fix commit/build and targeted regression results before marking a defect resolved; retain device-validation limits.
 
@@ -159,38 +159,41 @@ Twelve defect behaviors are reproduced below. AUD-012 is included as a verified 
 
 ## Resolved
 
-**No fixes have been implemented.** Verification did not change playback code or rebuild binaries. Twelve reproduced defects still need corrections; AUD-009 needs performance validation, and AUD-012 needs a compatibility-policy decision. No record is marked resolved.
+Software resolution commit **`1013584`**, branch **`fix/playback-reliability`**, build **2.0.2-beta.1**. Validation: 168 full host tests without skips plus two additional focused barrier/confidence controls; 46 TV JVM tests, Android assembly/lint and portable terminal-only core verification passed. No physical device/whole-movie acceptance is implied. The [branch guide](reliability-branches.md) describes behavior, bounds and comparison setup.
+
+| ID | Passing regression coverage |
+| --- | --- |
+| AUD-001 | DesktopSafetyTests.test_phone_update_refreshes_clean_field_preserves_precision_and_manual_draft |
+| AUD-002 | PlaybackSafetyTests.test_invalid_load_seek_offset_preserve_playing_epoch_and_media |
+| AUD-003 | ControlClientTest (cancellation before adoption, during connect, and EOF) |
+| AUD-004 | LiveBarrierSafetyTests.test_both_signed_leads_drain_with_real_clock_sender_and_receiver; EOF early-end/deadline/confidence controls |
+| AUD-005 | PlaybackSafetyTests.test_stale_status_cannot_hide_behind_fresh_baseline_pongs; brief-delay control |
+| AUD-006 | SlotOwnershipTests.test_concurrent_authenticated_handshakes_have_exactly_one_owner |
+| AUD-007 | PlaybackSafetyTests.test_invalid_load_seek_offset_preserve_playing_epoch_and_media; diagnostic rejection/state regression |
+| AUD-008 | RollbackTests; LiveBarrierSafetyTests.test_failed_audio_choice_restarts_previous_track_with_real_timing_barrier |
+| AUD-010 | PlaybackSafetyTests timeout/discontinuity and sustained-source-expiry cases |
+| AUD-011 | PlaybackSafetyTests.test_pause_attempts_both_endpoints_when_either_mpv_call_fails (all modes) |
+| AUD-013 | StatusPayloadTest (bounded Unicode catalogs, selected track, critical timing/positions) |
+| AUD-014 | OptionalLoggingTests (disk failure and bounded queue/backpressure) |
 
 ## Yet to be resolved
 
-- [ ] **AUD-001 (verified defect):** Refresh an untouched manual-offset field after external calibration; test edited drafts, precision and mode changes.
 
-- [ ] **AUD-002 (verified defect):** Reject invalid seek input before playback mutation; assert unchanged epoch, position and audio/video state.
 
-- [ ] **AUD-003 (verified defect):** Make socket adoption and cleanup cancellation-safe; cover cancellation, EOF and once-only notification.
 
-- [ ] **AUD-004 (verified defect):** Add bounded final-track draining; cover both EOF orders, signed lead and genuine stalls.
 
-- [ ] **AUD-005 (verified defect):** For baseline with live pongs, define a separate bounded status-age deadline.
 
-- [ ] **AUD-006 (verified defect):** Reserve/release the TV slot atomically.
 
-- [ ] **AUD-007 (verified defect):** Extend AUD-002 validation coverage to rejected load/offset requests; preserve the current movie.
 
-- [ ] **AUD-008 (verified defect):** Inject a failed passthrough track selection; verify restoration of the previous track and coordinated position.
 
 - [ ] **AUD-009 (partially verified mechanism):** Measure real foreground/cache contention and playback impact before changing the reproduced old-head prefetch scheduling.
 
-- [ ] **AUD-010 (verified defect):** Inject transient and sustained sampler faults; distinguish recoverable observations from stale/discontinuous clocks.
 
-- [ ] **AUD-011 (verified defect):** Inject mpv property/pause failures; ensure the independent TV pause is still attempted in every mode.
 
 - [ ] **AUD-012 (documented limitation):** Decide whether to retain the documented fail-closed UDP policy or add bounded authenticated TCP fallback; availability behavior is verified, not a new regression.
 
-- [ ] **AUD-013 (verified defect):** Test oversized subtitle/codec catalogs; bound status frames while preserving critical telemetry and ACK traffic.
 
-- [ ] **AUD-014 (verified defect):** Inject CSV/event-log errors; keep playback supervision alive while diagnosing logging failures.
 
 **Validation boundaries:** the fresh verification used isolated fault injection, permissive scheduling barriers for the handshake race, synthetic catalogs and API stubs. It did not validate physical HDR/Atmos, real HDMI driver behavior, panel latency, actual Android scheduling incidence or whole-movie reliability. The new hardware endurance run remained interrupted when the user turned the TV off. Earlier user-reported continuous audio/in-sync dialogue is historical evidence, not a fresh hardware result.
 
-The three-second holdover candidate remains separate from these checks. Its previously recorded 41 TV JVM tests, Android assembly/lint, 11 focused host diagnostic tests and portable core verification were not rerun as part of this verification; do not count those old results as new runs. No timing guards, drift equations, audio rate or encoded media were changed.
+The three-second holdover candidate remains separate from these checks. Its previously recorded 41 TV JVM tests, Android assembly/lint, 11 focused host diagnostic tests and portable core verification were not rerun as part of this verification; do not count those old results as new runs. Active-playback timing/slew equations, audio rate and encoded media remain unchanged. The new bounded final-track phase applies only after a validated near-end EOF; see the branch guide.
