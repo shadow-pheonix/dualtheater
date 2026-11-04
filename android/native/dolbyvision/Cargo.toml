@@ -1,0 +1,19 @@
+[package]
+name = "dualtheater-dovi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+dolby_vision = { version = "=3.4.0", default-features = false }
+jni = { version = "=0.21.1", default-features = false }
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+panic = "unwind"

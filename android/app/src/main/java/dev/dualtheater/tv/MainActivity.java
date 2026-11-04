@@ -45,7 +45,7 @@ public final class MainActivity extends Activity {
     private DiscoveredHost selectedHost;
     private boolean connecting, authRequired;
     private volatile boolean foreground;
-    private AlertDialog codeDialog;
+    private AlertDialog codeDialog, videoCompatibilityDialog;
     private TextView info;
     private EditText hostInput, portInput, tokenInput;
     private volatile ControlClient client;
@@ -71,6 +71,8 @@ public final class MainActivity extends Activity {
     private int bufferBudgetBytes;
     private DefaultAllocator bufferAllocator;
     private ReadAheadCache readAheadCache;
+    private volatile boolean dolbyVisionFelEnabled = true;
+    private volatile String dolbyVisionStatus = "Automatic FEL compatibility — waiting for video";
     private long droppedVideoFrames;
     private double transferMbps = -1;
     private long transferSampleNs;
@@ -132,12 +134,18 @@ public final class MainActivity extends Activity {
         title.setTextColor(0xfff4f7fb);
         setup.addView(title);
         SharedPreferences prefs = getPreferences(MODE_PRIVATE);
+        dolbyVisionFelEnabled = prefs.getBoolean("dv_fel_compat", true);
         TextView help = new TextView(this);
         help.setText("CONNECT  •  Choose your laptop on the same home network. Pair once with its six-digit code.");
         help.setTextSize(18); help.setTextColor(0xffb8c6d9); setup.addView(help);
+        Button hdrSettings = new Button(this); hdrSettings.setText("Video compatibility");
+        styleButton(hdrSettings); hdrSettings.setOnClickListener(v -> showDolbyVisionSettings());
         Button browseHome = new Button(this); browseHome.setText("Browse movies");
         styleButton(browseHome);
-        browseHome.setOnClickListener(v -> showProviders()); setup.addView(browseHome);
+        browseHome.setOnClickListener(v -> showProviders());
+        LinearLayout quickActions = new LinearLayout(this); quickActions.setOrientation(LinearLayout.HORIZONTAL);
+        quickActions.addView(browseHome, new LinearLayout.LayoutParams(0, -2, 1));
+        quickActions.addView(hdrSettings, new LinearLayout.LayoutParams(0, -2, 1)); setup.addView(quickActions);
         Button shareFolder = new Button(this); shareFolder.setText("Share a TV folder");
         styleButton(shareFolder);
         shareFolder.setOnClickListener(v -> chooseStorageTree()); setup.addView(shareFolder);
@@ -490,7 +498,9 @@ public final class MainActivity extends Activity {
             .setTargetBufferBytes(bufferBudgetBytes)
             .setPrioritizeTimeOverSizeThresholds(false).build();
         player = new ExoPlayer.Builder(this, videoAndText)
-            .setMediaSourceFactory(new DefaultMediaSourceFactory(readAheadCache.foregroundFactory()))
+            .setMediaSourceFactory(new DefaultMediaSourceFactory(readAheadCache.foregroundFactory(),
+                new DolbyVisionExtractorsFactory(new androidx.media3.extractor.DefaultExtractorsFactory(),
+                    () -> dolbyVisionFelEnabled, value -> dolbyVisionStatus = value)))
             .setLoadControl(load).build();
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
@@ -781,6 +791,7 @@ public final class MainActivity extends Activity {
     }
 
     private void closePlaybackMenu(boolean invalidateRequests) {
+        if (videoCompatibilityDialog != null) { videoCompatibilityDialog.dismiss(); videoCompatibilityDialog = null; }
         if (playbackMenuScroll != null && playbackMenuScroll.getParent() == root) root.removeView(playbackMenuScroll);
         playbackMenuScroll = null; playbackMenu = null; menuEpoch = -1; menuMediaGeneration = -1;
         if (invalidateRequests) uiGeneration++;
@@ -805,6 +816,7 @@ public final class MainActivity extends Activity {
         if (section.isEmpty()) {
             menuButton("Audio track", () -> showPlaybackMenu("Audio track"));
             menuButton("Subtitles", () -> showPlaybackMenu("Subtitles"));
+            menuButton("Video compatibility", this::showDolbyVisionSettings);
             menuButton("Browse movies", () -> { closePlaybackMenu(true); showBrowseMenu(); });
             menuButton("Resynchronize", () -> {
                 try { requestClient("resync", menuRequestFields(null)); }
@@ -855,6 +867,25 @@ public final class MainActivity extends Activity {
             View child = playbackMenu.getChildAt(i);
             if (child.isFocusable() && child.getVisibility() == View.VISIBLE) { child.requestFocus(); break; }
         }
+    }
+
+    private void showDolbyVisionSettings() {
+        String details = dolbyVisionStatus + "\n\nOnly a positively identified Profile 7 FEL stream is converted to Profile 8.1. "
+            + "Profile 7 MEL remains native. Profile 5, Profile 8, HDR10/HDR10+ and SDR stay on their existing paths.\n\n"
+            + "This keeps the encoded base picture and dynamic metadata, but drops the FEL enhancement layer; it does not reconstruct full FEL. "
+            + "The TV still needs a compatible Dolby Vision decoder.\n\n"
+            + "Changes apply when the next movie is loaded. Reload from Windows to apply to this movie. "
+            + "If the picture fails, turn this off and reload. Calibration remains available if the TV processing mode changes output latency.";
+        if (videoCompatibilityDialog != null) videoCompatibilityDialog.dismiss();
+        videoCompatibilityDialog = new AlertDialog.Builder(this).setTitle("Dolby Vision FEL compatibility")
+            .setMessage(details)
+            .setPositiveButton(dolbyVisionFelEnabled ? "Turn off for next load" : "Enable for next load", (dialog, which) -> {
+                dolbyVisionFelEnabled = !dolbyVisionFelEnabled;
+                getPreferences(MODE_PRIVATE).edit().putBoolean("dv_fel_compat", dolbyVisionFelEnabled).apply();
+            }).setNegativeButton("Close", null).create();
+        final AlertDialog current = videoCompatibilityDialog;
+        current.setOnDismissListener(dialog -> { if (videoCompatibilityDialog == current) videoCompatibilityDialog = null; });
+        current.show();
     }
 
     private void menuText(String value) {
@@ -1200,6 +1231,7 @@ public final class MainActivity extends Activity {
             s.put("timing_reconnecting", timingReconnecting);
             s.put("timing_error_only", timingReconnecting && error.equals(TIMING_ERROR));
             ReadAheadCache.Stats readAhead = readAheadCache.stats();
+            s.put("dolby_vision_compatibility", dolbyVisionStatus);
             s.put("read_ahead", new JSONObject().put("state", readAhead.state)
                 .put("ahead_bytes", readAhead.aheadBytes).put("cache_bytes", readAhead.cacheBytes)
                 .put("downloaded_bytes", readAhead.downloadedBytes).put("failures", readAhead.failures)

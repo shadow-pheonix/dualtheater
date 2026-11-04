@@ -21,3 +21,9 @@ mpv is **not redistributed** in the EXE or source ZIP. On explicit user request,
 ## Optional LG soundbar protocol inspection
 
 The read-only S95TR inspector uses the wire framing and public protocol constants documented by [google/python-temescal](https://github.com/google/python-temescal) (Copyright 2018 Google LLC, Apache License 2.0) and the model/AV-delay interpretation documented by [diogolccsilva/ha-lg-soundbar](https://github.com/diogolccsilva/ha-lg-soundbar) (MIT). These projects do not endorse DualTheater. The protocol client is an independent implementation using Windows CNG; it does not bundle those libraries or Home Assistant. A configured AV-delay setting is not a measurement of total soundbar processing latency.
+
+## TV Dolby Vision metadata compatibility
+
+The TV app bundles an original, source-available MIT JNI bridge built against **quietvoid's `dolby_vision` / libdovi 3.4.0 (MIT)**, with JNI/Rust dependencies locked in [Cargo.lock](android/native/dolbyvision/Cargo.lock). [Native provenance](android/native/dolbyvision/provenance.json) pins compiler/NDK versions, source/lock hashes and three ABI libraries. The full collected dependency, Rust runtime and NDK notices are included [in the APK assets and source](android/app/src/main/assets/licenses/dolby-vision-native.txt); the original bridge [license](android/native/dolbyvision/LICENSE) applies to that bridge. The notices also retain build/target-specific dependency texts for completeness.
+
+[Kodi's compatibility-mode behavior](https://github.com/xbmc/xbmc/pull/24143) informed the design; no Kodi GPL implementation is copied or linked. The TV uses libdovi directly through its own bounded RPU-only bridge, with Media3 1.9.0 retained. ExoPlayer HDR Utils was reviewed as a research reference but is not a packaged dependency. See [scope, operation and rebuilding](docs/dolby-vision-compatibility.md).

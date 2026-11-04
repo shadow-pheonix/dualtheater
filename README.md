@@ -8,6 +8,8 @@ A later long-session test encountered a timing-confidence pause. An **unreleased
 
 The [Windows/TV playback audit](docs/playback-audit.md) evaluates 14 records: twelve defect behaviors reproduced offline, one cache-scheduling mechanism whose real performance impact remains unmeasured, and one confirmed documented transport limitation. None is fixed. Check the manual lead field before **Save and resynchronize** after phone calibration, and use valid exact-seek input. Connection cancellation and final track-tail handling also need follow-up fixes. Whole-movie validation remains incomplete.
 
+**New on main, TV-only 2.0.4-beta.1:** automatic [Dolby Vision FEL compatibility](docs/dolby-vision-compatibility.md). The TV inspects RPU metadata: **Profile 7 MEL stays native; only positively identified Profile 7 FEL converts to Profile 8.1**. This keeps the encoded base layer, rewrites DV metadata and discards FEL enhancement data; full FEL reconstruction is not provided. Windows/phone, audio passthrough and synchronization are unchanged. The stable download links below do not contain this new TV feature. Software checks are separate from still-pending physical TV validation.
+
 DualTheater plays the **video on an Android TV or Google TV** using its native hardware decoder, while a **Windows laptop or desktop PC sends the original Dolby TrueHD Atmos audio over HDMI** to a soundbar or AV receiver. The two devices are coordinated over the home network.
 
 Version 2 adds embedded subtitles and audio choices across Windows, TV and phone, shared-folder/Android browsing, TV audio badges and guided navigation. It retains the **v1.0 video correction math**, with explicit clock-input, renderer-lifecycle and delivery fixes. Matching clients use [dedicated UDP timing](docs/datagram-timing.md), while movie bytes and playback commands use TCP. See the [complete operating guide](docs/next-version.md).
@@ -61,7 +63,7 @@ flowchart LR
 This project is **brand-independent** and designed for Android TV and Google TV devices running Android 8 or later. It is not proven to work on every device.
 
 - The TV must support the particular codec, resolution, HDR format and profile through Android's hardware decoding APIs.
-- HDR10, HDR10+ and Dolby Vision depend on the media, container metadata, TV hardware and firmware. Dolby Vision Profile 7/FEL reconstruction is not promised. Profile 5 must not be treated as having an HDR10-compatible base layer.
+- HDR10, HDR10+ and Dolby Vision depend on the media, container metadata, TV hardware and firmware. Dolby Vision Profile 7/FEL reconstruction is not promised. The unreleased TV FEL compatibility mode still requires a supported Profile 8.1 hardware decoder. Profile 5 must not be treated as having an HDR10-compatible base layer.
 - The Windows laptop or desktop PC needs an **HDMI output**, or a **USB-C (Type-C) port that supports display/audio output through a compatible USB-C-to-HDMI adapter** (for example, [DisplayPort Alt Mode](https://www.displayport.org/displayport-over-usb-c/)). A USB-C connector alone does not guarantee this capability; a charging/data-only port is insufficient. The adapter and driver must also support the required TrueHD passthrough; adapter-based operation has not yet been verified for this project.
 - The Windows laptop or desktop PC must already be able to bitstream the source's TrueHD track to the chosen HDMI endpoint using mpv/WASAPI exclusive mode.
 - The soundbar or receiver needs a compatible HDMI input. The design does not rely on the TV forwarding TrueHD audio.
@@ -106,7 +108,7 @@ The mpv path and exact audio endpoint are saved privately. On later launches, th
 
 ### 3. Choose a movie and play
 
-On **Player**, click **Choose movie…**, select the original local MKV and click **Load movie**. Wait for both players to prepare, then click **Play**. Automatic audio selection prefers English TrueHD Atmos, other TrueHD Atmos, then English/other TrueHD before supported compressed fallbacks; Atmos requires positive metadata. The original file stays on Windows and is streamed directly to the TV; there is no separate upload or conversion step.
+On **Player**, click **Choose movie…**, select the original local MKV and click **Load movie**. Wait for both players to prepare, then click **Play**. Automatic audio selection prefers English TrueHD Atmos, other TrueHD Atmos, then English/other TrueHD before supported compressed fallbacks; Atmos requires positive metadata. The original file stays on Windows and is streamed directly to the TV; there is no separate upload or file conversion step. The new TV mode can adapt detected FEL samples locally before decoding; the source file is unchanged.
 
 To select movies from the TV, first use Windows **Library → Share Windows folder…**, then TV **Browse movies → Windows folders**. Subfolders are accessible within the grant. Phone/TV storage must be shared through that device's folder picker and kept available. See [browsing and Android storage](docs/next-version.md#sharing-android-storage).
 
@@ -123,6 +125,7 @@ These instructions describe **v2.0.0**. Keep **Audio clock (recommended)** selec
 | Change audio language/track | Choose under **Audio track**, then press **Switch track**. Supported compressed output still depends on mpv, the HDMI driver and receiver; PCM fallback is rejected. |
 | Select subtitles | Choose under **Subtitles**, then **Apply subtitles**. Select **Off** to disable them. Embedded formats depend on Media3; external sidecar picking is not included. |
 | Browse shared movies | Use **Library** on Windows, **Browse movies** on TV or **Library** on the phone. Share/grant the source folder first. |
+| TV FEL compatibility (new TV build) | Open **Video compatibility** from the TV home screen or press **Up → Video compatibility** during playback. Automatic FEL-only conversion is enabled by default; MEL stays native. A setting change applies on the next **Load movie** from Windows, not on a seek. |
 | Play another movie | Choose it with **Choose movie…**, click **Load movie**, wait, then **Play**. |
 | Adjust physical lip-sync | In **Settings & help**, change **Video lead (ms)** and press **Save and resynchronize**. Increase it if sound arrives early; decrease it if sound arrives late. |
 | Recover a timing disturbance | On **Player**, click **Resynchronize**. It preserves the paused/playing state while coordinating both players again. |

@@ -1,0 +1,16 @@
+{
+  "bridge": "dualtheater-dovi 0.1.0",
+  "libdovi": "dolby_vision 3.4.0",
+  "rust": "1.91.0",
+  "ndk": "27.2.12479018",
+  "min_api": 26,
+  "elf_page_size": 16384,
+  "cargo_lock_sha256": "1c6c992d53b5b23a4da05655a0b8cdfac9809cedfd1b088630a730c3b2e55201",
+  "native_source_sha256": "880bd26dbd6dbaacd627d6ff56db0b57ad297063d5941c05704a0ee8238939c3",
+  "libraries_sha256": {
+    "arm64-v8a": "d33ab369d5e9359ce87d3ad683331c8a8120a71ab2c4715a0bde1feaefc8702d",
+    "armeabi-v7a": "483d41e3237179feff7106e4e6adc813b07d2b2089fc78b857f05282608f533d",
+    "x86_64": "a2890a5d5480cc5ae5e00ec5a5e8ef0df9a294f745a5b81aff43fc0cd4277c1b"
+  },
+  "notices_sha256": "4edf547ed37b20635dbb7b715effed486cc9eda7b6dd70609466dc5abbb6db30"
+}

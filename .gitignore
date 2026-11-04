@@ -54,3 +54,6 @@ settings.local.*
 
 calibration-*.json
 calibration-*.tmp
+
+# Optional native compiler output (prebuilt ABI libraries are tracked)
+android/native/dolbyvision/target/

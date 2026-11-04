@@ -1,5 +1,7 @@
 # Version 2.0 operating guide
 
+Main now adds **TV 2.0.4-beta.1** automatic [P7 FEL compatibility](dolby-vision-compatibility.md); Windows remains 2.0.1-beta.1 and phone 2.0.0. The default enabled TV setting converts only positively identified FEL. P7 MEL stays native. Use **Video compatibility** on TV; changes take effect at the next Windows **Load movie**. Existing Windows/phone clients remain compatible. No new stable release is implied.
+
 `main` builds **2.0.0**, promoted from the finalized local beta.4 candidate at the user's request. Existing package identities, private profiles and locked releases are preserved. Update Windows and TV together. Existing phone clients remain protocol-compatible.
 
 At the user's request, only the **post-1.0 drift changes** have been reverted. Shared transport and the TV renderer-clock algorithm use the v1.0 baseline, with explicit availability/lifecycle/start-verification exceptions described in [timing baseline](drift-control.md). V1.0 already includes synchronized clocks and bounded video-side correction; those original mechanisms remain. The saved calibration and untouched 1x audio passthrough are retained. The independent 64-bit transport-position conversion fix is retained as well.

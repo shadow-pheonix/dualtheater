@@ -13,3 +13,7 @@ Start with a known compatible HDR10 source and a known TrueHD Atmos track. Confi
 The included SDR/stereo TrueHD calibration clip has no Atmos objects or HDR metadata. A movie may require a different offset.
 
 For bug reports, provide sanitized codec/profile information, software versions, selected decoder, observed receiver format and a concise description. Remove personal paths, network addresses, pairing data, device identifiers and movie filenames. Do not upload films or raw unredacted logs.
+
+## FEL compatibility acceptance (when devices are available)
+
+Use matching APK rollback copies and the unchanged known-working Windows/mpv/audio setup. With TV FEL compatibility enabled, compare a positively classified P7 MEL sample (native format/bytes) and P7 FEL sample (P8.1 compatibility). Confirm the TV's own Dolby Vision indicator and picture/color quality; a software classification does not prove display output. Exercise repeated shared seek, pause/resume, subtitles, track changes and a full movie. Compare with compatibility off by loading again from Windows. Check actual lip-sync after picture-mode changes; the SDR phone sample does not establish every DV-mode output latency. See [feature bounds](dolby-vision-compatibility.md). These device checks have not been performed for this candidate.

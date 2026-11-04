@@ -7,8 +7,8 @@ android {
         applicationId 'dev.dualtheater.tv.robustsync'
         minSdk 26
         targetSdk 34
-        versionCode 20
-        versionName '2.0.1-beta.1'
+        versionCode 23
+        versionName '2.0.4-beta.1'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -20,4 +20,32 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.9.0'
     implementation 'androidx.media3:media3-ui:1.9.0'
     testImplementation 'junit:junit:4.13.2'
+}
+
+// Native libraries are rebuilt from the pinned Rust source, not downloaded at runtime.
+tasks.register('verifyDoviLibraries') {
+    doLast {
+        def record = new groovy.json.JsonSlurper().parse(file('../native/dolbyvision/provenance.json'))
+        record.libraries_sha256.each { abi, expected ->
+            def library = file("src/main/jniLibs/${abi}/libdualtheater_dovi.so")
+            if (!library.isFile() || java.security.MessageDigest.getInstance('SHA-256')
+                .digest(library.bytes).encodeHex().toString() != expected)
+                throw new GradleException("Rebuild/check the pinned Dolby Vision library for ${abi}")
+        }
+        def notices = file('src/main/assets/licenses/dolby-vision-native.txt')
+        def noticeHash = java.security.MessageDigest.getInstance('SHA-256').digest(notices.getText('UTF-8').replace('\r\n','\n').getBytes('UTF-8')).encodeHex().toString()
+        if (noticeHash != record.notices_sha256) throw new GradleException('Native license notices changed; rebuild/check provenance')
+        def source = file('../native/dolbyvision/src/lib.rs').getText('UTF-8').replace('\r\n', '\n')
+        def sourceHash = java.security.MessageDigest.getInstance('SHA-256').digest(source.getBytes('UTF-8')).encodeHex().toString()
+        def lockHash = java.security.MessageDigest.getInstance('SHA-256').digest(file('../native/dolbyvision/Cargo.lock').getText('UTF-8').replace('\r\n','\n').getBytes('UTF-8')).encodeHex().toString()
+        if (sourceHash != record.native_source_sha256 || lockHash != record.cargo_lock_sha256)
+            throw new GradleException('Native source/lock changed; rebuild Dolby Vision libraries')
+    }
+}
+preBuild.dependsOn verifyDoviLibraries
+android.testOptions.unitTests.all {
+    if (project.hasProperty('doviNativeDir')) {
+        systemProperty 'java.library.path', project.property('doviNativeDir')
+        systemProperty 'dualtheater.dovi.native_test', 'true'
+    }
 }

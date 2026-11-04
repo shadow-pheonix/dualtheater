@@ -1,5 +1,12 @@
 # Changelog
 
+## TV 2.0.4-beta.1 — unreleased
+
+- Add automatic Dolby Vision compatibility only for positively identified Profile 7 FEL, with native P7 MEL and other formats preserved.
+- Adapt FEL RPU metadata to P8.1 before decoder selection and drop enhancement NALs without re-encoding the base picture or changing original files, audio or media timestamps. Full FEL reconstruction remains unavailable.
+- Add a saved TV **Video compatibility** setting/status; changes apply on the next shared movie load.
+- Pin source-built libdovi JNI libraries and notices for three TV ABIs; retain Media3 1.9.0 and existing Windows/phone/timing behavior. Hardware HDR/color/sync acceptance is pending.
+
 ## 2.0.1-beta.1 — unreleased
 
 - Align TV anchor holdover with the existing three-second timing-link deadline while retaining the uncertainty ceiling, stale-anchor rejection and original audio/video correction math.

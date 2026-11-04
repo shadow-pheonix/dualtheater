@@ -4,7 +4,7 @@ Version 2.0 includes [shared client/library controls](next-client-protocol.md), 
 
 The coordinator supports [audio-clock synchronization, an advanced video servo and an original-timing baseline](robust-sync.md). The [research decisions](sync-research.md) explain the extension points and remaining physical accuracy limits.
 
-The Windows host serves the original seekable media file byte-for-byte over HTTP. The Android TV/Google TV companion extracts video and passes it to a supported hardware MediaCodec through Media3. It has no audio renderer. The original container includes unused audio bytes; this uses additional network bandwidth but avoids remuxing and metadata changes.
+The Windows host serves the original seekable media file byte-for-byte over HTTP. The Android TV/Google TV companion extracts video and passes it to a supported hardware MediaCodec through Media3. It has no audio renderer. The original container includes unused audio bytes; this uses additional network bandwidth and avoids a server remux. The unreleased [TV FEL compatibility path](dolby-vision-compatibility.md) is a documented decoder-side exception: only classified P7 FEL samples have RPU metadata adapted to P8.1 and enhancement data dropped. Native MEL/other video, original file/HTTP bytes, timestamps and Windows compressed audio remain unchanged.
 
 The same local file is read by mpv on Windows for compressed TrueHD output through WASAPI exclusive mode. mpv IPC stays on a randomly named local Windows pipe. The network protocol exposes only a small set of playback operations, not arbitrary mpv commands.
 

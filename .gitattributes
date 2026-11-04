@@ -1,0 +1,7 @@
+# Native runtime artifacts and generated metadata fixtures must stay byte-identical.
+*.so binary
+android/app/src/test/resources/dovi/*.bin binary
+android/app/src/test/resources/dovi/*.mkv binary
+android/native/dolbyvision/Cargo.lock text eol=lf
+android/native/dolbyvision/src/*.rs text eol=lf
+android/app/src/main/assets/licenses/dolby-vision-native.txt text eol=lf
