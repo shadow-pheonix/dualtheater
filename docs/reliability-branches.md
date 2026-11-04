@@ -33,3 +33,7 @@ Cache scheduling and transport availability are software-testable; real cache co
 ## Source operation
 
 Use the existing [source CLI setup and commands](command-line.md) from the selected branch. Use the same private `--data-dir` to retain calibration; a separate CLI profile is not automatically imported into the portable desktop profile. Do not copy settings/logs into shared build folders. Update Windows and TV together when comparing the experimental transport capability. Keep a rollback copy of the prior EXE/APK and confirm the active lead and HDMI endpoint before future hardware tests.
+
+## Completed comparison snapshots
+
+Both branches are committed separately: [reliability parent](https://github.com/shadow-pheonix/dualtheater/tree/fix/playback-reliability) and its [experimental child](https://github.com/shadow-pheonix/dualtheater/tree/experiment/cache-timing-fallback). The parent's local bundle pins source `5585ad8` / code `1013584`; the child's pins source `70b9955` / code `a70c3d2`. Each contains its matching EXE, TV APK, sanitized source ZIP, operating instructions, provenance and checksums. They are local comparison artifacts, not GitHub release downloads. Published download links still point to stable 2.0.0. Parent/child APK certificates match; no phone update is needed. Preserve both complete folders and use the matching Windows/TV pair when hardware testing resumes.
